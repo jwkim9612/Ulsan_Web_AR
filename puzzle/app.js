@@ -38,18 +38,35 @@ function showFinished() {
   finished.style.display = 'flex';
 }
 
-// --- 8th Wall Image Target 연동 지점 ---
-// TODO: 8thwall.org 최신 문서 기준으로 XR8 이미지 타겟 이벤트를 구독해서
-// 마커 이름(reference image name = PIECE_NAMES 중 하나)이 감지되면 collectPiece(name) 호출.
-// 예시 형태(정확한 API는 문서 확인 후 확정):
-//
-// XR8.XrController.registerCameraPipelineModule({
-//   name: 'puzzle-image-detection',
-//   onImageFound: (event) => collectPiece(event.name),
-// });
-
-// --- 임시 테스트용: 실물 마커 없이 슬롯을 탭하면 수집된 것처럼 동작 ---
-// (8th Wall 연동 전까지 게임 로직만 먼저 확인하기 위한 용도, 연동 후 제거)
-PIECE_NAMES.forEach((name, i) => {
-  document.getElementById(`slot-${i}`).addEventListener('click', () => collectPiece(name));
+// --- 8th Wall Image Target 연동 ---
+// 8thwall/aframe-image-targets-example 공식 예제 기준: <xrextras-named-image-target name="...">
+// 엘리먼트가 자기 name과 일치하는 마커를 인식하면 자기 자신에 "xrextrasfound"/"xrextraslost" 이벤트를 쏜다.
+PIECE_NAMES.forEach((name) => {
+  const targetEl = document.querySelector(`xrextras-named-image-target[name="${name}"]`);
+  targetEl.addEventListener('xrextrasfound', () => collectPiece(name));
 });
+
+// XR8.XrController에 실제 마커 이미지 데이터(image-target-cli로 생성한 JSON)를 등록해야 인식이 시작됨.
+// TODO: 실물 카드 이미지 4장을 `npx @8thwall/image-target-cli@latest`로 처리해서
+// image-targets/p_1.json ~ p_4.json 으로 저장하면 아래 fetch가 자동으로 로드함.
+const onxrloaded = async () => {
+  const results = await Promise.allSettled(
+    PIECE_NAMES.map((name) => fetch(`image-targets/${name}.json`).then((r) => {
+      if (!r.ok) throw new Error(`${name}.json not found`);
+      return r.json();
+    }))
+  );
+
+  const imageTargetData = [];
+  results.forEach((result, i) => {
+    if (result.status === 'fulfilled') {
+      imageTargetData.push(result.value);
+    } else {
+      console.warn(`[puzzle] ${PIECE_NAMES[i]} 마커 데이터 없음 — image-targets/${PIECE_NAMES[i]}.json 준비 필요`);
+    }
+  });
+
+  XR8.XrController.configure({ imageTargetData });
+};
+
+window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);

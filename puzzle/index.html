@@ -4,6 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Puzzle</title>
+
+  <!-- A-Frame 빌드(8th Wall 전용, 8thwall/aframe-image-targets-example 공식 예제에서 그대로 가져옴) -->
+  <script crossorigin="anonymous" src="vendor/8frame-1.5.0.min.js"></script>
+  <!-- 8th Wall 엔진(오픈소스 전환 후 API 키 불필요) -->
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
     #hud {
@@ -24,10 +31,21 @@
     }
     #finished img { max-width: 80vw; max-height: 80vh; }
   </style>
-  <!-- TODO: 8th Wall 엔진 스크립트 태그. 오픈소스 전환 이후 정확한 부트스트랩 방식은
-       https://8thwall.org/docs 최신 문서 확인 후 채워넣을 것 (엔진 self-host 또는 배포된 바이너리 사용). -->
 </head>
 <body>
+  <!-- disableWorldTracking: SLAM(월드 트래킹) 불필요 — 마커 인식만 사용 -->
+  <a-scene xrextras-loading xrextras-runtime-error renderer="colorManagement:true"
+    xrweb="disableWorldTracking: true">
+    <a-camera position="0 0 0"></a-camera>
+    <a-light type="ambient" intensity="1"></a-light>
+
+    <!-- name은 image-targets/*.json 생성 시 사용한 타겟 이름과 반드시 일치해야 함 -->
+    <xrextras-named-image-target name="p_1"></xrextras-named-image-target>
+    <xrextras-named-image-target name="p_2"></xrextras-named-image-target>
+    <xrextras-named-image-target name="p_3"></xrextras-named-image-target>
+    <xrextras-named-image-target name="p_4"></xrextras-named-image-target>
+  </a-scene>
+
   <div id="hud">
     <div class="slot" id="slot-0"></div>
     <div class="slot" id="slot-1"></div>
