@@ -71,6 +71,14 @@
       max-width: 70vw; max-height: 70vh;
     }
 
+    /* 쓰레기줍기 모드: 쓰다듬기 인식되면 1초간 뜨는 텍스트 */
+    #pet-text {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 25; display: none;
+      font: bold 28px sans-serif; color: #fff; text-shadow: 0 0 8px #000;
+      background: rgba(0,0,0,0.5); padding: 12px 24px; border-radius: 12px;
+    }
+
     #permission-msg {
       position: fixed; inset: 0; z-index: 40; display: none;
       align-items: center; justify-content: center; text-align: center;
@@ -97,6 +105,8 @@
     <div class="puzzle-slot" id="puzzle-slot-3"></div>
   </div>
   <img id="puzzle-finished" src="" alt="완성" />
+
+  <div id="pet-text">쓰다듬었음</div>
 
   <div id="permission-msg">카메라 권한이 필요합니다<br />브라우저 설정에서 카메라 접근을 허용해주세요</div>
 
