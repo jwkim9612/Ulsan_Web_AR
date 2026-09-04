@@ -1,0 +1,12 @@
+{
+  "name": "ulsan_ar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "akp_gabiya AR minigames (Puzzle, Seaclean) as standalone mobile-web experiences",
+  "scripts": {
+    "dev": "http-server . -p 8080 -c-1"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

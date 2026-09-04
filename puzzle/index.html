@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Puzzle</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      display: flex; justify-content: center; gap: 12px; padding: 16px;
+      pointer-events: none;
+    }
+    .slot {
+      width: 22vw; height: 22vw; max-width: 100px; max-height: 100px;
+      border: 2px solid #fff; border-radius: 8px; background: rgba(0,0,0,0.4);
+      background-size: cover; background-position: center;
+      opacity: 0.4; transition: opacity 0.3s;
+    }
+    .slot.collected { opacity: 1; }
+    #finished {
+      position: fixed; inset: 0; z-index: 20; display: none;
+      align-items: center; justify-content: center; background: rgba(0,0,0,0.7);
+    }
+    #finished img { max-width: 80vw; max-height: 80vh; }
+  </style>
+  <!-- TODO: 8th Wall 엔진 스크립트 태그. 오픈소스 전환 이후 정확한 부트스트랩 방식은
+       https://8thwall.org/docs 최신 문서 확인 후 채워넣을 것 (엔진 self-host 또는 배포된 바이너리 사용). -->
+</head>
+<body>
+  <div id="hud">
+    <div class="slot" id="slot-0"></div>
+    <div class="slot" id="slot-1"></div>
+    <div class="slot" id="slot-2"></div>
+    <div class="slot" id="slot-3"></div>
+  </div>
+
+  <div id="finished">
+    <img id="finished-img" src="" alt="완성" />
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
