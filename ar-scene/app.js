@@ -1,19 +1,24 @@
 // AR Scene: 뒤로가기/모드 전환(퍼즐·쓰레기줍기) UI + 실제 인식.
-// 퍼즐 = MindAR 이미지 트래킹, 쓰레기줍기 = MediaPipe Hands. 카메라 파이프라인이 서로 달라서
-// 모드 전환 시 한쪽을 확실히 stop()해서 카메라를 놔준 뒤 다른 쪽을 시작한다(페이지 이동 없음).
-// 지금은 테스트 단계라 인식되면 화면 중앙에 텍스트만 띄운다.
+// 퍼즐 = MindAR 이미지 트래킹(2x2 조각 수집), 쓰레기줍기 = MediaPipe Hands(손 관절 표시).
+// 카메라 파이프라인이 서로 달라서 모드 전환 시 한쪽을 확실히 stop()해서 카메라를 놔준 뒤
+// 다른 쪽을 시작한다(페이지 이동 없음).
 
 import { MindARThree } from 'https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js';
 
 const PIECE_NAMES = ['p_1', 'p_2', 'p_3', 'p_4'];
+const PIECE_IMAGES = PIECE_NAMES.map((name) => `../assets/images/${name}.png`);
+const FINISHED_IMAGE = '../assets/images/1.png';
 
 const backBtn = document.getElementById('back-btn');
 const modePuzzleBtn = document.getElementById('mode-puzzle');
 const modeTrashBtn = document.getElementById('mode-trash');
-const recognizedTextEl = document.getElementById('recognized-text');
 const permissionMsg = document.getElementById('permission-msg');
 const handVideoEl = document.getElementById('hand-video');
+const handCanvas = document.getElementById('hand-canvas');
+const handCtx = handCanvas.getContext('2d');
 const mindarContainer = document.getElementById('mindar-container');
+const puzzleHud = document.getElementById('puzzle-hud');
+const puzzleFinishedEl = document.getElementById('puzzle-finished');
 
 let currentMode = 'puzzle';
 
@@ -29,20 +34,39 @@ modeTrashBtn.addEventListener('click', () => switchMode('trash'));
 const mindarThree = new MindARThree({
   container: mindarContainer,
   imageTargetSrc: 'targets.mind',
+  uiScanning: 'no',
 });
+
+const collectedPieces = new Set();
+
 PIECE_NAMES.forEach((name, targetIndex) => {
+  const slot = document.getElementById(`puzzle-slot-${targetIndex}`);
+  slot.style.backgroundImage = `url(${PIECE_IMAGES[targetIndex]})`;
+
   const anchor = mindarThree.addAnchor(targetIndex);
   anchor.onTargetFound = () => {
-    recognizedTextEl.textContent = `${name} 인식됨!`;
-    recognizedTextEl.style.display = 'block';
-  };
-  anchor.onTargetLost = () => {
-    recognizedTextEl.style.display = 'none';
+    if (collectedPieces.has(targetIndex)) return;
+    collectedPieces.add(targetIndex);
+    slot.classList.add('collected');
+    if (collectedPieces.size === PIECE_NAMES.length) {
+      showPuzzleFinished();
+    }
   };
 });
 
+function showPuzzleFinished() {
+  puzzleHud.style.display = 'none';
+  puzzleFinishedEl.src = FINISHED_IMAGE;
+  puzzleFinishedEl.style.display = 'block';
+}
+
 async function startPuzzle() {
   mindarContainer.style.display = 'block';
+  if (collectedPieces.size === PIECE_NAMES.length) {
+    puzzleFinishedEl.style.display = 'block';
+  } else {
+    puzzleHud.style.display = 'grid';
+  }
   await mindarThree.start();
   const { renderer, scene, camera } = mindarThree;
   renderer.setAnimationLoop(() => renderer.render(scene, camera));
@@ -52,10 +76,11 @@ function stopPuzzle() {
   mindarThree.renderer.setAnimationLoop(null);
   mindarThree.stop(); // 내부적으로 video track.stop()까지 호출해서 카메라를 실제로 놔줌
   mindarContainer.style.display = 'none';
-  recognizedTextEl.style.display = 'none';
+  puzzleHud.style.display = 'none';
+  puzzleFinishedEl.style.display = 'none';
 }
 
-// --- 쓰레기줍기 모드: MediaPipe Hands ---
+// --- 쓰레기줍기 모드: MediaPipe Hands, 손 관절을 캔버스에 그려서 표시 ---
 const hands = new Hands({
   locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
 });
@@ -67,15 +92,30 @@ hands.setOptions({
 });
 hands.onResults((results) => {
   if (currentMode !== 'trash') return;
-  const found = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
-  recognizedTextEl.textContent = '손 인식됨!';
-  recognizedTextEl.style.display = found ? 'block' : 'none';
+
+  // 카메라 해상도가 잡히면 캔버스 내부 해상도를 맞춰서(같은 object-fit:cover라 좌표 변환 계산 불필요)
+  if (
+    handVideoEl.videoWidth &&
+    (handCanvas.width !== handVideoEl.videoWidth || handCanvas.height !== handVideoEl.videoHeight)
+  ) {
+    handCanvas.width = handVideoEl.videoWidth;
+    handCanvas.height = handVideoEl.videoHeight;
+  }
+
+  handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+  if (results.multiHandLandmarks) {
+    for (const landmarks of results.multiHandLandmarks) {
+      drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, { color: '#2ea5ff', lineWidth: 3 });
+      drawLandmarks(handCtx, landmarks, { color: '#ffffff', fillColor: '#2ea5ff', radius: 4 });
+    }
+  }
 });
 
 let mpCamera = null;
 
 function startTrash() {
   handVideoEl.style.display = 'block';
+  handCanvas.style.display = 'block';
   mpCamera = new Camera(handVideoEl, {
     onFrame: async () => {
       await hands.send({ image: handVideoEl });
@@ -100,7 +140,8 @@ function stopTrash() {
     handVideoEl.srcObject = null;
   }
   handVideoEl.style.display = 'none';
-  recognizedTextEl.style.display = 'none';
+  handCanvas.style.display = 'none';
+  handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
 }
 
 async function switchMode(mode) {
