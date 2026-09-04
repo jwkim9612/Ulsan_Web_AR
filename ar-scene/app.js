@@ -21,9 +21,10 @@ const puzzleHud = document.getElementById('puzzle-hud');
 const puzzleFinishedEl = document.getElementById('puzzle-finished');
 const petTextEl = document.getElementById('pet-text');
 
-// 완성 이미지가 커서(수 MB) 다 맞춘 순간에 src를 지정하면 로딩 지연이 눈에 보임 —
-// 미리 백그라운드에서 받아두고 필요할 때는 display만 바꾼다.
+// 다 맞춘 순간에 src를 지정하면 디코딩 지연으로 살짝 깜빡여 보임 —
+// 미리 받아서 decode()까지 끝내둔 다음, 필요할 때는 display만 바꾼다.
 puzzleFinishedEl.src = FINISHED_IMAGE;
+puzzleFinishedEl.decode().catch(() => {});
 
 let currentMode = 'puzzle';
 
@@ -96,13 +97,13 @@ hands.setOptions({
 });
 // --- 쓰다듬기 감지 ---
 // 손바닥 중앙(랜드마크 9번, 중지 뿌리)의 좌표를 최근 PET_HISTORY_MS만큼 기록해두고,
-// 그 안에서 방향(위/아래)이 여러 번 바뀌면서도 좁은 범위 안에 머물러 있으면 "쓰다듬기"로 판정.
-// (그냥 손을 대고 있는 것과 구분하기 위해 방향 전환 횟수를 봄, 큰 스와이프는 spread 제한으로 걸러냄)
-const PET_HISTORY_MS = 1000;
-const PET_MIN_REVERSALS = 3;
-const PET_MIN_MOVE = 0.008; // 프레임 간 이 정도는 움직여야 "움직임"으로 침(잔떨림 노이즈 제거)
-const PET_MAX_SPREAD = 0.2; // 정규화 좌표 기준 — 이 범위를 넘으면 쓰다듬기가 아니라 휘두른 것으로 봄
-const PET_COOLDOWN_MS = 1500;
+// 그 안에서 방향이 여러 번 바뀌면서도 좁은 범위 안에 머물러 있으면 "쓰다듬기"로 판정.
+// 상하좌우 어느 방향이든 되게, 매 프레임 더 크게 움직인 축(x 또는 y) 기준으로 방향을 본다.
+const PET_HISTORY_MS = 1500;
+const PET_MIN_REVERSALS = 2;
+const PET_MIN_MOVE = 0.005; // 프레임 간 이 정도는 움직여야 "움직임"으로 침(잔떨림 노이즈 제거)
+const PET_MAX_SPREAD = 0.3; // 정규화 좌표 기준 — 이 범위를 넘으면 쓰다듬기가 아니라 휘두른 것으로 봄
+const PET_COOLDOWN_MS = 1000;
 
 let petHistory = [];
 let lastPetTime = 0;
@@ -111,14 +112,16 @@ let petTextTimer = null;
 function checkPetting(x, y, now) {
   petHistory.push({ x, y, t: now });
   petHistory = petHistory.filter((p) => now - p.t <= PET_HISTORY_MS);
-  if (petHistory.length < 5) return false;
+  if (petHistory.length < 4) return false;
 
   let reversals = 0;
   let prevDir = 0;
   for (let i = 1; i < petHistory.length; i++) {
+    const dx = petHistory[i].x - petHistory[i - 1].x;
     const dy = petHistory[i].y - petHistory[i - 1].y;
-    if (Math.abs(dy) < PET_MIN_MOVE) continue;
-    const dir = dy > 0 ? 1 : -1;
+    const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    if (Math.abs(delta) < PET_MIN_MOVE) continue;
+    const dir = delta > 0 ? 1 : -1;
     if (prevDir !== 0 && dir !== prevDir) reversals++;
     prevDir = dir;
   }
