@@ -4,9 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Ulsan_AR - AR Scene</title>
+
+  <!-- A-Frame 빌드(8th Wall 전용) + 8th Wall 엔진(오픈소스, API 키 불필요) -->
+  <script crossorigin="anonymous" src="../puzzle/vendor/8frame-1.5.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js" async crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
+
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
-    #video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
     #back-btn {
       position: fixed; top: 16px; left: 16px; z-index: 30;
@@ -25,15 +30,28 @@
     }
     #mode-panel button.active { background: #2ea5ff; }
 
-    #permission-msg {
-      position: fixed; inset: 0; z-index: 40; display: none;
-      align-items: center; justify-content: center; text-align: center;
-      color: #fff; font: 16px sans-serif; background: rgba(0,0,0,0.8); padding: 24px;
+    /* 테스트용: 마커 인식되면 화면 중앙에 뜨는 텍스트 (퍼즐 모드일 때만) */
+    #recognized-text {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 25; display: none;
+      font: bold 28px sans-serif; color: #fff; text-shadow: 0 0 8px #000;
+      background: rgba(0,0,0,0.5); padding: 12px 24px; border-radius: 12px;
     }
   </style>
 </head>
 <body>
-  <video id="video" autoplay playsinline muted></video>
+  <!-- disableWorldTracking: SLAM(월드 트래킹) 불필요 — 마커 인식만 사용 -->
+  <a-scene xrextras-loading xrextras-runtime-error renderer="colorManagement:true"
+    xrweb="disableWorldTracking: true">
+    <a-camera position="0 0 0"></a-camera>
+    <a-light type="ambient" intensity="1"></a-light>
+
+    <!-- name은 puzzle/image-targets/*.json 생성 시 사용한 타겟 이름과 반드시 일치해야 함 -->
+    <xrextras-named-image-target name="p_1"></xrextras-named-image-target>
+    <xrextras-named-image-target name="p_2"></xrextras-named-image-target>
+    <xrextras-named-image-target name="p_3"></xrextras-named-image-target>
+    <xrextras-named-image-target name="p_4"></xrextras-named-image-target>
+  </a-scene>
 
   <button id="back-btn">←</button>
 
@@ -42,7 +60,7 @@
     <button id="mode-trash">쓰레기줍기</button>
   </div>
 
-  <div id="permission-msg">카메라 권한이 필요합니다<br />브라우저 설정에서 카메라 접근을 허용해주세요</div>
+  <div id="recognized-text"></div>
 
   <script src="app.js"></script>
 </body>
