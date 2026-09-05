@@ -245,11 +245,18 @@ function onLockEnd() {
 }
 
 // --- 초기화 ---
+// 단안 카메라 기반 SLAM은 트래킹 시작 직후 몇 초간 실측 스케일(m 단위) 추정이 아직 안정되지
+// 않은 상태라, 이 시점에 바로 오브젝트를 배치하면 스케일이 재추정될 때마다 위치가 흔들려서
+// "다가가면 오히려 멀어지는" 것처럼 보인다. 잠깐 스캔할 시간을 준 다음 배치한다.
+const SCALE_SETTLE_MS = 3000;
+
 const onxrloaded = () => {
   XR8.XrController.configure({ scale: 'absolute' }); // 실측(미터) 스케일 요청
   XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
   XR8.addCameraPipelineModule(distanceTrackerModule);
-  spawnTrashItems();
+
+  trashHintEl.textContent = '천천히 주변을 비춰서 스캔해주세요...';
+  setTimeout(spawnTrashItems, SCALE_SETTLE_MS);
 };
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
