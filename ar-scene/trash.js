@@ -39,7 +39,7 @@ function debugLog(msg) {
 function renderDebugOverlay() {
   debugOverlayEl.textContent =
     `pipeline:${debugState.pipelineStatus} cvActive:${debugState.cvActive} locked:${debugState.locked}\n` +
-    `framesSent:${debugState.framesSent} resultsRecv:${debugState.resultsReceived} landmarks:${debugState.lastLandmarkCount}\n` +
+    `framesSent:${debugState.framesSent} sendResolved:${debugState.sendResolved || 0} resultsRecv:${debugState.resultsReceived} landmarks:${debugState.lastLandmarkCount}\n` +
     `pet:${debugState.lastPet ? JSON.stringify(debugState.lastPet) : '-'}\n` +
     `--- log ---\n${debugState.log.join('\n')}`;
 }
@@ -54,6 +54,14 @@ if (DEBUG) {
   document.body.appendChild(debugOverlayEl);
   debugLog('debug overlay started');
   setInterval(renderDebugOverlay, 300);
+  // hands.send()는 Promise를 반환하는데 기존 동기 try/catch로는 비동기 reject를 못 잡는다 —
+  // MediaPipe 내부에서 조용히 실패(reject)하거나 uncaught 에러를 던지는 경우를 잡기 위한 전역 net.
+  window.addEventListener('unhandledrejection', (ev) => {
+    debugLog(`unhandled rejection: ${(ev.reason && ev.reason.message) || ev.reason}`);
+  });
+  window.addEventListener('error', (ev) => {
+    debugLog(`window error: ${ev.message} @ ${(ev.filename || '').split('/').pop()}:${ev.lineno}`);
+  });
 }
 
 backBtn.addEventListener('click', () => {
@@ -297,8 +305,16 @@ const cvModule = {
       const now = performance.now();
       if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
       lastHandsSendAt = now;
-      hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
-      if (DEBUG) debugState.framesSent++;
+      const sendPromise = hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
+      if (DEBUG) {
+        debugState.framesSent++;
+        if (sendPromise && typeof sendPromise.then === 'function') {
+          sendPromise.then(
+            () => { debugState.sendResolved = (debugState.sendResolved || 0) + 1; },
+            (e) => debugLog(`hands.send rejected: ${(e && e.message) || e}`),
+          );
+        }
+      }
     } catch (e) {
       console.error('[trash] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
       debugLog(`send failed: ${(e && e.message) || e}`);
