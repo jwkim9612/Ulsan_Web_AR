@@ -279,12 +279,21 @@ function pixelArrayToCanvas({ rows, cols, rowBytes, pixels }) {
   return handsSourceCanvas;
 }
 
+let loggedPixelArrayShape = false; // 락마다 한 번만 실제 객체 모양을 로그(스팸 방지)
+
 const cvModule = {
   name: 'trash-cv',
   onProcessCpu: ({ processGpuResult }) => {
     try {
       const cameraPixelArray = processGpuResult.camerapixelarray;
       if (!cameraPixelArray) return;
+      if (DEBUG && !loggedPixelArrayShape) {
+        loggedPixelArrayShape = true;
+        const { rows, cols, rowBytes, pixels } = cameraPixelArray;
+        debugLog(`shape rows=${rows}(${typeof rows}) cols=${cols}(${typeof cols}) rowBytes=${rowBytes}(${typeof rowBytes})`);
+        debugLog(`pixels=${pixels && pixels.constructor && pixels.constructor.name} len=${pixels && pixels.length}`);
+        debugLog(`keys=${Object.keys(cameraPixelArray).join(',')}`);
+      }
       const now = performance.now();
       if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
       lastHandsSendAt = now;
@@ -303,7 +312,11 @@ const cvModule = {
 let cvActive = false;
 
 function onLockStart() {
-  if (DEBUG) { debugState.pipelineStatus = 'attempting'; debugLog('onLockStart: registering pipeline modules'); }
+  if (DEBUG) {
+    debugState.pipelineStatus = 'attempting';
+    debugLog('onLockStart: registering pipeline modules');
+    loggedPixelArrayShape = false;
+  }
   try {
     XR8.addCameraPipelineModule(XR8.CameraPixelArray.pipelineModule({ luminance: false, maxDimension: 320 }));
     XR8.addCameraPipelineModule(cvModule);
