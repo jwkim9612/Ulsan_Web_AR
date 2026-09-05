@@ -38,7 +38,6 @@ const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표,
 const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 lock (순수 실측 거리만
                               // 보면 스케일 오차 때문에 절대 안 가까워지는 오브젝트가 생길 수 있어서,
                               // "바라보고 있는지"를 같이 봐서 느슨하게 함)
-const UNLOCK_DISTANCE_M = 2.5; // 락 해제 히스테리시스(경계에서 lock이 깜빡이는 것 방지)
 const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const LOCK_FORWARD_OFFSET_M = 1.0; // lock되면 카메라 앞 이 거리에 고정(너무 가까워 커 보이지 않게)
 const SPAWN_HEIGHT_OFFSET_M = 0.4; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
@@ -102,13 +101,7 @@ function updateLock(camPos, camRot) {
     return;
   }
 
-  if (dist(camPos, lockedItem.worldPos) > UNLOCK_DISTANCE_M) {
-    onLockEnd();
-    lockedItem = null;
-    trashHintEl.textContent = '쓰레기 쪽으로 다가가 보세요';
-    return;
-  }
-
+  // 멀어져도 락은 안 풀린다 — 쓰다듬어서 없애기 전까지는 계속 눈앞에 고정.
   lockedItem.el.object3D.position.set(
     camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
     camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
