@@ -2,7 +2,7 @@
   "name": "ulsan_ar",
   "version": "0.1.0",
   "private": true,
-  "description": "akp_gabiya AR minigames (Puzzle, Seaclean) as standalone mobile-web experiences",
+  "description": "Ulsan_AR mobile-web AR event experience (8th Wall image-tracking puzzle + world-tracking trash pickup)",
   "scripts": {
     "dev": "http-server . -p 8080 -c-1"
   },

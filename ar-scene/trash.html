@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Ulsan_AR - 퍼즐</title>
+  <title>Ulsan_AR - 쓰레기줍기</title>
 
   <!-- A-Frame 빌드(8th Wall 전용, 8thwall/aframe-image-targets-example 공식 예제에서 그대로 가져옴) -->
   <script crossorigin="anonymous" src="vendor/8frame-1.5.0.min.js"></script>
@@ -12,8 +12,18 @@
   <script src="https://cdn.jsdelivr.net/npm/@8thwall/landing-page@1/dist/landing-page.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js" crossorigin="anonymous"></script>
 
+  <!-- 쓰다듬기 판정 = MediaPipe Hands(구글, 무료). World Tracking이 이미 잡고 있는 카메라 프레임을
+       XR8.CameraPixelArray로 넘겨받아 쓰므로 별도 getUserMedia(camera_utils)는 필요 없음. -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+
+    #hand-canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      z-index: 5; pointer-events: none;
+    }
 
     #back-btn {
       position: fixed; top: 16px; left: 16px; z-index: 30;
@@ -32,55 +42,51 @@
     }
     #mode-panel button.active { background: #2ea5ff; }
 
-    /* 퍼즐 모드: 화면 중앙 2x2 조각 그리드(못 모은 조각은 반투명) */
-    #puzzle-hud {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      z-index: 15;
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+    #trash-count {
+      position: fixed; top: 76px; left: 0; right: 0; z-index: 20;
+      display: flex; justify-content: center;
+      color: #fff; font: bold 20px sans-serif;
     }
-    .puzzle-slot {
-      width: 28vw; height: 28vw; max-width: 130px; max-height: 130px;
-      background-size: cover; background-position: center;
-      border: 2px solid rgba(255,255,255,0.6); border-radius: 8px;
-      opacity: 0.35; transition: opacity 0.3s;
+    #trash-count span {
+      background: rgba(0,0,0,0.4); padding: 6px 16px; border-radius: 20px;
     }
-    .puzzle-slot.collected { opacity: 1; }
 
-    #puzzle-finished {
+    #trash-hint {
+      position: fixed; bottom: 40px; left: 0; right: 0; z-index: 20;
+      display: flex; justify-content: center;
+      color: #fff; font: 16px sans-serif; text-shadow: 0 0 6px #000;
+      pointer-events: none;
+    }
+
+    #trash-finished {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      z-index: 15; display: none;
-      max-width: 70vw; max-height: 70vh;
+      z-index: 25; display: none;
+      font: bold 24px sans-serif; color: #fff; text-align: center;
+      background: rgba(0,0,0,0.5); padding: 16px 28px; border-radius: 12px;
     }
   </style>
 </head>
 <body>
   <a-scene xrextras-gesture-detector landing-page xrextras-loading xrextras-runtime-error
-    renderer="colorManagement:true" xrweb="disableWorldTracking: true">
+    renderer="colorManagement:true">
     <a-camera position="0 0 0"></a-camera>
     <a-light type="ambient" intensity="1"></a-light>
-
-    <!-- name은 image-targets/*.json 생성 시 사용한 타겟 이름과 반드시 일치해야 함 -->
-    <xrextras-named-image-target name="p_1"></xrextras-named-image-target>
-    <xrextras-named-image-target name="p_2"></xrextras-named-image-target>
-    <xrextras-named-image-target name="p_3"></xrextras-named-image-target>
-    <xrextras-named-image-target name="p_4"></xrextras-named-image-target>
+    <a-entity id="trash-root"></a-entity>
   </a-scene>
+
+  <canvas id="hand-canvas"></canvas>
 
   <button id="back-btn">←</button>
 
   <div id="mode-panel">
-    <button id="mode-puzzle" class="active">퍼즐</button>
-    <button id="mode-trash">쓰레기줍기</button>
+    <button id="mode-puzzle">퍼즐</button>
+    <button id="mode-trash" class="active">쓰레기줍기</button>
   </div>
 
-  <div id="puzzle-hud">
-    <div class="puzzle-slot" id="puzzle-slot-0"></div>
-    <div class="puzzle-slot" id="puzzle-slot-1"></div>
-    <div class="puzzle-slot" id="puzzle-slot-2"></div>
-    <div class="puzzle-slot" id="puzzle-slot-3"></div>
-  </div>
-  <img id="puzzle-finished" src="" alt="완성" />
+  <div id="trash-count"><span id="trash-count-text">0/5</span></div>
+  <div id="trash-hint"></div>
+  <div id="trash-finished">쓰레기를 다 치웠어요!</div>
 
-  <script src="puzzle.js"></script>
+  <script src="trash.js"></script>
 </body>
 </html>

@@ -10,5 +10,5 @@
 3. 대화형으로 이미지 경로를 물어보면 이미지 하나씩 넣고, 타겟 이름을 `p_1`, `p_2`, `p_3`, `p_4`로 지정
 4. 생성된 `p_1.json` 등 파일을 이 폴더에 복사
 
-이름(`p_1`~`p_4`)은 `puzzle/index.html`의 `<xrextras-named-image-target name="...">` 및
-`puzzle/app.js`의 `PIECE_NAMES`와 반드시 일치해야 합니다.
+이름(`p_1`~`p_4`)은 `ar-scene/index.html`의 `<xrextras-named-image-target name="...">` 및
+`ar-scene/puzzle.js`의 `PIECE_NAMES`와 반드시 일치해야 합니다.
