@@ -29,13 +29,18 @@ function resizeHandCanvas() {
 resizeHandCanvas();
 window.addEventListener('resize', resizeHandCanvas);
 
-// --- 오브젝트 배치 및 실측 거리 판정 ---
+// --- 오브젝트 배치 및 거리/응시 판정 ---
 const TRASH_COUNT = 5;
-const SPAWN_MIN_M = 1.5;
-const SPAWN_MAX_M = 4.0; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터
-const LOCK_DISTANCE_M = 1.0; // 이 거리 안으로 들어오면 lock
-const UNLOCK_DISTANCE_M = 1.5; // 락 해제 히스테리시스(경계에서 lock이 깜빡이는 것 방지)
-const LOCK_FORWARD_OFFSET_M = 0.6; // lock되면 카메라 앞 이 거리에 고정
+const SPAWN_MIN_M = 1.2;
+const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터. 스케일 추정 오차가
+                          // 거리에 비례해서 커지므로 너무 멀리 두면 "가까워져도 거리가 안 줄어드는"
+                          // 오브젝트가 생길 수 있어 범위를 좁게 잡음.
+const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 lock (순수 실측 거리만
+                              // 보면 스케일 오차 때문에 절대 안 가까워지는 오브젝트가 생길 수 있어서,
+                              // "바라보고 있는지"를 같이 봐서 느슨하게 함)
+const UNLOCK_DISTANCE_M = 2.5; // 락 해제 히스테리시스(경계에서 lock이 깜빡이는 것 방지)
+const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
+const LOCK_FORWARD_OFFSET_M = 1.0; // lock되면 카메라 앞 이 거리에 고정(너무 가까워 커 보이지 않게)
 const SPAWN_HEIGHT_OFFSET_M = 0.4; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
 let trashItems = []; // { el, worldPos: {x,y,z}, removed }
@@ -71,8 +76,24 @@ function dist(a, b) {
 }
 
 function updateLock(camPos, camRot) {
+  let forward;
+  try {
+    forward = new AFRAME.THREE.Vector3(0, 0, -1)
+      .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
+  } catch (e) {
+    console.error('[trash] 카메라 방향 계산 실패', e);
+    return;
+  }
+
   if (!lockedItem) {
-    const candidate = trashItems.find((t) => !t.removed && dist(camPos, t.worldPos) < LOCK_DISTANCE_M);
+    // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
+    const candidate = trashItems.find((t) => {
+      if (t.removed || dist(camPos, t.worldPos) >= LOCK_DISTANCE_M) return false;
+      const toItem = new AFRAME.THREE.Vector3(
+        t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
+      ).normalize();
+      return toItem.dot(forward) >= LOCK_GAZE_DOT_THRESHOLD;
+    });
     if (candidate) {
       lockedItem = candidate;
       trashHintEl.textContent = '쓰다듬어서 치워보세요';
@@ -88,17 +109,11 @@ function updateLock(camPos, camRot) {
     return;
   }
 
-  try {
-    const forward = new AFRAME.THREE.Vector3(0, 0, -1)
-      .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
-    lockedItem.el.object3D.position.set(
-      camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
-      camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
-      camPos.z + forward.z * LOCK_FORWARD_OFFSET_M,
-    );
-  } catch (e) {
-    console.error('[trash] lock 위치 갱신 실패', e);
-  }
+  lockedItem.el.object3D.position.set(
+    camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
+    camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
+    camPos.z + forward.z * LOCK_FORWARD_OFFSET_M,
+  );
 }
 
 function removeLockedItem() {
