@@ -353,6 +353,25 @@ function onLockStart() {
   }
 }
 
+// MediaPipe Hands는 wasm/모델 파일을 첫 send() 시점에야 지연 로딩한다. 이걸 락 거는 순간까지
+// 미뤄두면 사용자가 처음 쓰다듬으려는 바로 그 순간 로딩 렉을 그대로 겪게 되므로, 스캔 대기
+// 시간(SCALE_SETTLE_MS) 동안 더미 프레임을 한 번 보내 미리 로딩해둔다.
+function warmupHands() {
+  if (sendInFlight) return;
+  const warmupCanvas = document.createElement('canvas');
+  warmupCanvas.width = 64;
+  warmupCanvas.height = 64;
+  sendInFlight = true;
+  if (DEBUG) debugLog('warmup: send() started');
+  const p = hands.send({ image: warmupCanvas });
+  const done = (label) => { if (DEBUG) debugLog(`warmup: ${label}`); sendInFlight = false; };
+  if (p && typeof p.then === 'function') {
+    p.then(() => done('resolved'), (e) => done(`rejected: ${(e && e.message) || e}`));
+  } else {
+    sendInFlight = false;
+  }
+}
+
 function onLockEnd() {
   if (cvActive) {
     try {
@@ -381,6 +400,7 @@ const onxrloaded = () => {
   XR8.addCameraPipelineModule(distanceTrackerModule);
 
   trashHintEl.textContent = '천천히 주변을 비춰서 스캔해주세요...';
+  warmupHands(); // 스캔 대기 시간에 묻혀서 사용자는 로딩 렉을 못 느끼게
   setTimeout(spawnTrashItems, SCALE_SETTLE_MS);
 };
 
