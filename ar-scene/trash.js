@@ -40,7 +40,7 @@ const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 
                               // "바라보고 있는지"를 같이 봐서 느슨하게 함)
 const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const LOCK_FORWARD_OFFSET_M = 1.0; // lock되면 카메라 앞 이 거리에 고정(너무 가까워 커 보이지 않게)
-const SPAWN_HEIGHT_OFFSET_M = 0.4; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
+const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
 let trashItems = []; // { el, worldPos: {x,y,z}, removed }
 let lockedItem = null;
