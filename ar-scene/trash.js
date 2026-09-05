@@ -36,6 +36,7 @@ const SPAWN_MAX_M = 4.0; // 카메라 시작 위치(원점) 기준 구면좌표,
 const LOCK_DISTANCE_M = 1.0; // 이 거리 안으로 들어오면 lock
 const UNLOCK_DISTANCE_M = 1.5; // 락 해제 히스테리시스(경계에서 lock이 깜빡이는 것 방지)
 const LOCK_FORWARD_OFFSET_M = 0.6; // lock되면 카메라 앞 이 거리에 고정
+const SPAWN_HEIGHT_OFFSET_M = 0.4; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
 let trashItems = []; // { el, worldPos: {x,y,z}, removed }
 let lockedItem = null;
@@ -49,7 +50,7 @@ function spawnTrashItems() {
     const phi = Math.acos((Math.random() * 2) - 1);
     const worldPos = {
       x: radius * Math.sin(phi) * Math.cos(theta),
-      y: radius * Math.sin(phi) * Math.sin(theta) * 0.5, // 세로 범위는 좀 좁게
+      y: SPAWN_HEIGHT_OFFSET_M + radius * Math.sin(phi) * Math.sin(theta) * 0.4, // 세로 범위는 좀 좁게
       z: radius * Math.cos(phi),
     };
 
@@ -87,14 +88,17 @@ function updateLock(camPos, camRot) {
     return;
   }
 
-  const forward = new AFRAME.THREE.Vector3(0, 0, -1)
-    .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
-  const lockedPos = {
-    x: camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
-    y: camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
-    z: camPos.z + forward.z * LOCK_FORWARD_OFFSET_M,
-  };
-  lockedItem.el.object3D.position.set(lockedPos.x, lockedPos.y, lockedPos.z);
+  try {
+    const forward = new AFRAME.THREE.Vector3(0, 0, -1)
+      .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
+    lockedItem.el.object3D.position.set(
+      camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
+      camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
+      camPos.z + forward.z * LOCK_FORWARD_OFFSET_M,
+    );
+  } catch (e) {
+    console.error('[trash] lock 위치 갱신 실패', e);
+  }
 }
 
 function removeLockedItem() {
@@ -223,23 +227,45 @@ function pixelArrayToCanvas({ rows, cols, rowBytes, pixels }) {
 const cvModule = {
   name: 'trash-cv',
   onProcessCpu: ({ processGpuResult }) => {
-    const cameraPixelArray = processGpuResult.camerapixelarray;
-    if (!cameraPixelArray) return;
-    const now = performance.now();
-    if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
-    lastHandsSendAt = now;
-    hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
+    try {
+      const cameraPixelArray = processGpuResult.camerapixelarray;
+      if (!cameraPixelArray) return;
+      const now = performance.now();
+      if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
+      lastHandsSendAt = now;
+      hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
+    } catch (e) {
+      console.error('[trash] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
+    }
   },
 };
 
+// XR8.CameraPixelArray는 락되기 전까지 한 번도 안 건드리는 API라, 실제 기기에서 처음
+// 호출되는 시점(락 되는 순간)에야 문제가 드러날 수 있다 — 여기서 실패해도 손 인식만
+// 못 하게 될 뿐, 거리 판정/락 자체(World Tracking)는 계속 정상 동작하도록 격리한다.
+let cvActive = false;
+
 function onLockStart() {
-  XR8.addCameraPipelineModule(XR8.CameraPixelArray.pipelineModule({ luminance: false, maxDimension: 320 }));
-  XR8.addCameraPipelineModule(cvModule);
+  try {
+    XR8.addCameraPipelineModule(XR8.CameraPixelArray.pipelineModule({ luminance: false, maxDimension: 320 }));
+    XR8.addCameraPipelineModule(cvModule);
+    cvActive = true;
+  } catch (e) {
+    console.error('[trash] CameraPixelArray 파이프라인 모듈 등록 실패 — 쓰다듬기 인식 없이 진행', e);
+    cvActive = false;
+  }
 }
 
 function onLockEnd() {
-  XR8.removeCameraPipelineModule('trash-cv');
-  XR8.removeCameraPipelineModule('camerapixelarray');
+  if (cvActive) {
+    try {
+      XR8.removeCameraPipelineModule('trash-cv');
+      XR8.removeCameraPipelineModule('camerapixelarray');
+    } catch (e) {
+      console.error('[trash] CameraPixelArray 파이프라인 모듈 해제 실패', e);
+    }
+    cvActive = false;
+  }
   handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
   petHistory = [];
 }
