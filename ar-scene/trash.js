@@ -15,6 +15,47 @@ const trashFinishedEl = document.getElementById('trash-finished');
 const handCanvas = document.getElementById('hand-canvas');
 const handCtx = handCanvas.getContext('2d');
 
+// --- 안드로이드 크롬 손 인식 미동작 진단용 디버그 오버레이 (?debug=1) ---
+// USB 디버깅 없이도 화면에서 바로 원인을 좁힐 수 있도록, 파이프라인 등록/프레임 전달/검출
+// 각 단계의 성공·실패를 눈에 보이는 로그로 남긴다. 평소(?debug=1 없음)에는 완전히 비활성.
+const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
+const debugState = {
+  pipelineStatus: 'idle', // idle | attempting | ok | failed
+  cvActive: false,
+  locked: false,
+  framesSent: 0,
+  resultsReceived: 0,
+  lastLandmarkCount: 0,
+  lastPet: null,
+  log: [], // 최근 이벤트/에러 스크롤 로그
+};
+let debugOverlayEl = null;
+function debugLog(msg) {
+  if (!DEBUG) return;
+  const t = new Date().toISOString().slice(11, 23);
+  debugState.log.push(`${t} ${msg}`);
+  if (debugState.log.length > 10) debugState.log.shift();
+}
+function renderDebugOverlay() {
+  debugOverlayEl.textContent =
+    `pipeline:${debugState.pipelineStatus} cvActive:${debugState.cvActive} locked:${debugState.locked}\n` +
+    `framesSent:${debugState.framesSent} resultsRecv:${debugState.resultsReceived} landmarks:${debugState.lastLandmarkCount}\n` +
+    `pet:${debugState.lastPet ? JSON.stringify(debugState.lastPet) : '-'}\n` +
+    `--- log ---\n${debugState.log.join('\n')}`;
+}
+if (DEBUG) {
+  debugOverlayEl = document.createElement('pre');
+  Object.assign(debugOverlayEl.style, {
+    position: 'fixed', top: '0', right: '0', zIndex: '9999',
+    margin: '0', padding: '8px', fontSize: '11px', lineHeight: '1.4',
+    color: '#0f0', background: 'rgba(0,0,0,0.6)', maxWidth: '60vw',
+    maxHeight: '100vh', overflow: 'hidden', whiteSpace: 'pre-wrap', pointerEvents: 'none',
+  });
+  document.body.appendChild(debugOverlayEl);
+  debugLog('debug overlay started');
+  setInterval(renderDebugOverlay, 300);
+}
+
 backBtn.addEventListener('click', () => {
   location.href = '../index.html';
 });
@@ -81,6 +122,7 @@ function updateLock(camPos, camRot) {
       .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
   } catch (e) {
     console.error('[trash] 카메라 방향 계산 실패', e);
+    if (DEBUG) debugLog(`camera orientation failed: ${(e && e.message) || e}`);
     return;
   }
 
@@ -96,6 +138,7 @@ function updateLock(camPos, camRot) {
     if (candidate) {
       lockedItem = candidate;
       trashHintEl.textContent = '쓰다듬어서 치워보세요';
+      if (DEBUG) debugState.locked = true;
       onLockStart();
     }
     return;
@@ -171,6 +214,7 @@ function checkPetting(x, y, now) {
   const ys = petHistory.map((p) => p.y);
   const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
 
+  if (DEBUG) debugState.lastPet = { reversals, spread: Number(spread.toFixed(4)) };
   return reversals >= PET_MIN_REVERSALS && spread <= PET_MAX_SPREAD;
 }
 
@@ -185,9 +229,11 @@ hands.setOptions({
 });
 
 hands.onResults((results) => {
+  if (DEBUG) debugState.resultsReceived++;
   handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
 
   const hasHand = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
+  if (DEBUG) debugState.lastLandmarkCount = hasHand ? results.multiHandLandmarks[0].length : 0;
   if (!hasHand) {
     petHistory = [];
     return;
@@ -229,6 +275,7 @@ function pixelArrayToCanvas({ rows, cols, rowBytes, pixels }) {
     }
   }
   handsSourceCtx.putImageData(imageData, 0, 0);
+  if (DEBUG) handCtx.drawImage(handsSourceCanvas, 0, 0, 160, 120); // 색이 잘못되면 RGBA 가정 오류 육안 확인용
   return handsSourceCanvas;
 }
 
@@ -242,8 +289,10 @@ const cvModule = {
       if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
       lastHandsSendAt = now;
       hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
+      if (DEBUG) debugState.framesSent++;
     } catch (e) {
       console.error('[trash] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
+      debugLog(`send failed: ${(e && e.message) || e}`);
     }
   },
 };
@@ -254,13 +303,16 @@ const cvModule = {
 let cvActive = false;
 
 function onLockStart() {
+  if (DEBUG) { debugState.pipelineStatus = 'attempting'; debugLog('onLockStart: registering pipeline modules'); }
   try {
     XR8.addCameraPipelineModule(XR8.CameraPixelArray.pipelineModule({ luminance: false, maxDimension: 320 }));
     XR8.addCameraPipelineModule(cvModule);
     cvActive = true;
+    if (DEBUG) { debugState.pipelineStatus = 'ok'; debugState.cvActive = true; debugLog('pipeline registered ok'); }
   } catch (e) {
     console.error('[trash] CameraPixelArray 파이프라인 모듈 등록 실패 — 쓰다듬기 인식 없이 진행', e);
     cvActive = false;
+    if (DEBUG) { debugState.pipelineStatus = 'failed'; debugLog(`pipeline register failed: ${(e && e.message) || e}`); }
   }
 }
 
@@ -271,9 +323,11 @@ function onLockEnd() {
       XR8.removeCameraPipelineModule('camerapixelarray');
     } catch (e) {
       console.error('[trash] CameraPixelArray 파이프라인 모듈 해제 실패', e);
+      if (DEBUG) debugLog(`pipeline unregister failed: ${(e && e.message) || e}`);
     }
     cvActive = false;
   }
+  if (DEBUG) { debugState.cvActive = false; debugState.locked = false; debugState.pipelineStatus = 'idle'; }
   handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
   petHistory = [];
 }
