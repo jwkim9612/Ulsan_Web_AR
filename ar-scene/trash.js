@@ -289,12 +289,18 @@ function pixelArrayToCanvas({ rows, cols, rowBytes, pixels }) {
 
 let loggedPixelArrayShape = false; // 락마다 한 번만 실제 객체 모양을 로그(스팸 방지)
 
+// MediaPipe Hands(레거시 Solutions API)는 이전 send()의 Promise가 끝나기 전에 다음 프레임을
+// 보내면 내부 WASM 상태가 겹쳐서 깨질 수 있다("memory access out of bounds"로 계속 reject됨 —
+// 처리 속도가 느린 기기일수록 시간 스로틀만으로는 안 걸러지고 겹칠 확률이 높아짐). 그래서 시간
+// 스로틀과 별개로, 이전 프레임이 아직 처리 중이면 무조건 이번 프레임은 건너뛴다.
+let sendInFlight = false;
+
 const cvModule = {
   name: 'trash-cv',
   onProcessCpu: ({ processGpuResult }) => {
     try {
       const cameraPixelArray = processGpuResult.camerapixelarray;
-      if (!cameraPixelArray) return;
+      if (!cameraPixelArray || sendInFlight) return;
       if (DEBUG && !loggedPixelArrayShape) {
         loggedPixelArrayShape = true;
         const { rows, cols, rowBytes, pixels } = cameraPixelArray;
@@ -305,17 +311,19 @@ const cvModule = {
       const now = performance.now();
       if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
       lastHandsSendAt = now;
+      sendInFlight = true;
       const sendPromise = hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
-      if (DEBUG) {
-        debugState.framesSent++;
-        if (sendPromise && typeof sendPromise.then === 'function') {
-          sendPromise.then(
-            () => { debugState.sendResolved = (debugState.sendResolved || 0) + 1; },
-            (e) => debugLog(`hands.send rejected: ${(e && e.message) || e}`),
-          );
-        }
+      if (DEBUG) debugState.framesSent++;
+      if (sendPromise && typeof sendPromise.then === 'function') {
+        sendPromise.then(
+          () => { if (DEBUG) debugState.sendResolved = (debugState.sendResolved || 0) + 1; },
+          (e) => { if (DEBUG) debugLog(`hands.send rejected: ${(e && e.message) || e}`); },
+        ).finally(() => { sendInFlight = false; });
+      } else {
+        sendInFlight = false; // send()가 Promise가 아닌 값을 준 이례적인 경우 대비
       }
     } catch (e) {
+      sendInFlight = false;
       console.error('[trash] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
       debugLog(`send failed: ${(e && e.message) || e}`);
     }
