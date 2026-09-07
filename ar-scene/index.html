@@ -58,15 +58,10 @@
 </head>
 <body>
   <a-scene xrextras-gesture-detector landing-page xrextras-loading xrextras-runtime-error
-    renderer="colorManagement:true" xrweb="disableWorldTracking: true">
+    renderer="colorManagement:true" xrweb="allowedDevices: MOBILE_AND_HEADSETS">
     <a-camera position="0 0 0"></a-camera>
     <a-light type="ambient" intensity="1"></a-light>
-
-    <!-- name은 image-targets/*.json 생성 시 사용한 타겟 이름과 반드시 일치해야 함 -->
-    <xrextras-named-image-target name="p_1"></xrextras-named-image-target>
-    <xrextras-named-image-target name="p_2"></xrextras-named-image-target>
-    <xrextras-named-image-target name="p_3"></xrextras-named-image-target>
-    <xrextras-named-image-target name="p_4"></xrextras-named-image-target>
+    <a-entity id="puzzle-targets-root"></a-entity>
   </a-scene>
 
   <button id="back-btn">←</button>

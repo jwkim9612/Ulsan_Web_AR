@@ -3,8 +3,7 @@
 // 오브젝트를 화면 앞에 고정(lock)시킨다. lock된 동안에만 XR8.CameraPixelArray로 카메라 프레임을
 // 받아 MediaPipe Hands에 넘기고, 손바닥을 쓰다듬는 동작을 감지하면 그 오브젝트를 없앤다.
 //
-// 퍼즐 모드(이미지 트래킹 전용)와는 xrweb의 disableWorldTracking 설정이 정반대라 8th Wall 엔진
-// 실행 중에는 못 바꾸므로 index.html과 별도 페이지로 분리돼 있다.
+// 퍼즐 모드(index.html)도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리돼 있다.
 
 const backBtn = document.getElementById('back-btn');
 const modePuzzleBtn = document.getElementById('mode-puzzle');
