@@ -105,6 +105,8 @@ function spawnPuzzleTargets() {
     ring.setAttribute('visible', false);
     el.appendChild(ring);
 
+    puzzleTargetsRoot.appendChild(el);
+
     puzzleTargets.push({
       el, worldPos, index, collected: false, gazeStartedAt: null, ringEl: ring,
     });
