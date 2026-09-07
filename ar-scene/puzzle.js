@@ -1,7 +1,7 @@
 // AR Scene: 퍼즐 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를 추적해서 사용자 주변에
 // 퍼즐 조각 오브젝트 4개(조각 이미지를 입힌 평면)를 배치하고, 사용자가 실제로 일정 거리 안까지
-// 다가가면서 그 오브젝트 쪽을 바라보고 있으면 그 즉시 조각을 채운다. 화면 중앙 2x2 그리드가
-// 하나씩 채워지고, 4개를 다 모으면 완성 이미지가 화면에 표시된다.
+// 다가가서 그 오브젝트 쪽을 바라본 채로 DWELL_MS(2초)를 유지하면 조각을 채운다. 화면 중앙 2x2
+// 그리드가 하나씩 채워지고, 4개를 다 모으면 완성 이미지가 화면에 표시된다.
 // 쓰레기줍기 모드도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리되어 있다(trash.html).
 
 const PIECE_NAMES = ['p_1', 'p_2', 'p_3', 'p_4'];
@@ -57,8 +57,9 @@ const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표,
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 const COLLECT_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 조각을 채움
 const COLLECT_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
+const DWELL_MS = 2000; // 거리+응시 조건을 이만큼 끊기지 않고 유지해야 조각을 채움
 
-let puzzleTargets = []; // { el, worldPos, index, collected }
+let puzzleTargets = []; // { el, worldPos, index, collected, gazeStartedAt }
 
 // TODO: plane placeholder를 실제 조각 3D 모델(glb 등)로 교체 가능.
 function spawnPuzzleTargets() {
@@ -78,7 +79,7 @@ function spawnPuzzleTargets() {
     el.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
     puzzleTargetsRoot.appendChild(el);
 
-    puzzleTargets.push({ el, worldPos, index, collected: false });
+    puzzleTargets.push({ el, worldPos, index, collected: false, gazeStartedAt: null });
   });
 }
 
@@ -104,22 +105,34 @@ function checkProximity(camPos, camRot) {
     return;
   }
 
-  let candidate = null;
+  const now = performance.now();
+
   puzzleTargets.forEach((t) => {
     if (t.collected) return;
     faceCamera(t, camPos);
 
-    if (candidate || dist(camPos, t.worldPos) >= COLLECT_DISTANCE_M) return;
-    const toTarget = new AFRAME.THREE.Vector3(
-      t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
-    ).normalize();
-    if (toTarget.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD) candidate = t;
-  });
-  if (!candidate) return;
+    let gazing = false;
+    if (dist(camPos, t.worldPos) < COLLECT_DISTANCE_M) {
+      const toTarget = new AFRAME.THREE.Vector3(
+        t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
+      ).normalize();
+      gazing = toTarget.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD;
+    }
 
-  candidate.collected = true;
-  candidate.el.remove();
-  collectPiece(candidate.index);
+    if (!gazing) {
+      t.gazeStartedAt = null;
+      return;
+    }
+    if (t.gazeStartedAt === null) {
+      t.gazeStartedAt = now;
+      return;
+    }
+    if (now - t.gazeStartedAt < DWELL_MS) return;
+
+    t.collected = true;
+    t.el.remove();
+    collectPiece(t.index);
+  });
 }
 
 const distanceTrackerModule = {
