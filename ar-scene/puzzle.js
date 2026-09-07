@@ -52,12 +52,15 @@ PIECE_NAMES.forEach((name, targetIndex) => {
 // --- 오브젝트 배치 및 거리/응시 판정 (ar-scene/trash.js의 스폰/판정 로직 참고) ---
 const puzzleTargetsRoot = document.getElementById('puzzle-targets-root');
 
-const SPAWN_MIN_M = 1.2;
-const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터.
+const SPAWN_MIN_M = 1.5;
+const SPAWN_MAX_M = 4.5; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터.
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
-const COLLECT_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 조각을 채움
+const COLLECT_DISTANCE_M = 3.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 조각을 채움
 const COLLECT_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const DWELL_MS = 2000; // 거리+응시 조건을 이만큼 끊기지 않고 유지해야 조각을 채움
+
+const RING_RADIUS_INNER = 0.24;
+const RING_RADIUS_OUTER = 0.3;
 
 let puzzleTargets = []; // { el, worldPos, index, collected, gazeStartedAt }
 
@@ -77,9 +80,34 @@ function spawnPuzzleTargets() {
     el.setAttribute('geometry', 'primitive: plane; width: 0.4; height: 0.4');
     el.setAttribute('material', `src: ${PIECE_IMAGES[index]}; side: double`);
     el.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
-    puzzleTargetsRoot.appendChild(el);
+    // 대기 중 눈에 잘 띄도록 위아래로 천천히 부유.
+    el.setAttribute(
+      'animation__float',
+      `property: position.y; from: ${worldPos.y}; to: ${worldPos.y + 0.08}; dir: alternate; dur: 1500; loop: true; easing: easeInOutSine`,
+    );
 
-    puzzleTargets.push({ el, worldPos, index, collected: false, gazeStartedAt: null });
+    // 은은하게 빛나는 후광(글로우) — 조각보다 살짝 크게, 뒤쪽에 배치하고 밝기를 펄스.
+    const glow = document.createElement('a-entity');
+    glow.setAttribute('geometry', 'primitive: plane; width: 0.55; height: 0.55');
+    glow.setAttribute('material', 'color: #7CFFF0; shader: flat; transparent: true; opacity: 0.25; side: double; blending: additive');
+    glow.setAttribute('position', '0 0 -0.01');
+    glow.setAttribute(
+      'animation__pulse',
+      'property: material.opacity; from: 0.15; to: 0.45; dir: alternate; dur: 1200; loop: true; easing: easeInOutSine',
+    );
+    el.appendChild(glow);
+
+    // 응시 진행률 링 — 거리+응시 조건을 만족하는 동안만 보이고, DWELL_MS 대비 진행률만큼 채워짐.
+    const ring = document.createElement('a-entity');
+    ring.setAttribute('geometry', `primitive: ring; radiusInner: ${RING_RADIUS_INNER}; radiusOuter: ${RING_RADIUS_OUTER}; thetaStart: 0; thetaLength: 0`);
+    ring.setAttribute('material', 'color: #FFD400; shader: flat; transparent: true; opacity: 0.9; side: double');
+    ring.setAttribute('position', '0 0 0.01');
+    ring.setAttribute('visible', false);
+    el.appendChild(ring);
+
+    puzzleTargets.push({
+      el, worldPos, index, collected: false, gazeStartedAt: null, ringEl: ring,
+    });
   });
 }
 
@@ -121,13 +149,18 @@ function checkProximity(camPos, camRot) {
 
     if (!gazing) {
       t.gazeStartedAt = null;
+      t.ringEl.setAttribute('visible', false);
       return;
     }
     if (t.gazeStartedAt === null) {
       t.gazeStartedAt = now;
-      return;
     }
-    if (now - t.gazeStartedAt < DWELL_MS) return;
+
+    const progress = Math.min(1, (now - t.gazeStartedAt) / DWELL_MS);
+    t.ringEl.setAttribute('visible', true);
+    t.ringEl.setAttribute('geometry', 'thetaLength', progress * 360);
+
+    if (progress < 1) return;
 
     t.collected = true;
     t.el.remove();
