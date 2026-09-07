@@ -86,6 +86,14 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
+// 조각 이미지가 항상 잘 보이도록, 수직 기울임 없이(Y축 기준) 카메라 쪽을 바라보게 매 프레임 회전.
+// plane 정면(+Z)이 카메라를 향하도록 lookAt(-Z가 타겟을 보게 함) 후 180도 뒤집는다.
+function faceCamera(t, camPos) {
+  const lookTarget = new AFRAME.THREE.Vector3(camPos.x, t.worldPos.y, camPos.z);
+  t.el.object3D.lookAt(lookTarget);
+  t.el.object3D.rotateY(Math.PI);
+}
+
 function checkProximity(camPos, camRot) {
   let forward;
   try {
@@ -96,18 +104,22 @@ function checkProximity(camPos, camRot) {
     return;
   }
 
-  const target = puzzleTargets.find((t) => {
-    if (t.collected || dist(camPos, t.worldPos) >= COLLECT_DISTANCE_M) return false;
+  let candidate = null;
+  puzzleTargets.forEach((t) => {
+    if (t.collected) return;
+    faceCamera(t, camPos);
+
+    if (candidate || dist(camPos, t.worldPos) >= COLLECT_DISTANCE_M) return;
     const toTarget = new AFRAME.THREE.Vector3(
       t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
     ).normalize();
-    return toTarget.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD;
+    if (toTarget.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD) candidate = t;
   });
-  if (!target) return;
+  if (!candidate) return;
 
-  target.collected = true;
-  target.el.remove();
-  collectPiece(target.index);
+  candidate.collected = true;
+  candidate.el.remove();
+  collectPiece(candidate.index);
 }
 
 const distanceTrackerModule = {
