@@ -53,8 +53,9 @@ PIECE_NAMES.forEach((name, targetIndex) => {
 const puzzleTargetsRoot = document.getElementById('puzzle-targets-root');
 
 const SPAWN_MIN_M = 1.5;
-const SPAWN_MAX_M = 4.5; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터.
+const SPAWN_MAX_M = 4.5; // 카메라 시작 위치(원점) 기준 원형 배치, 실측 미터.
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
+const SPAWN_HEIGHT_VARIATION_M = 0.3; // 위 오프셋 기준 위아래로 이만큼까지 무작위 높낮이
 const COLLECT_DISTANCE_M = 3.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 조각을 채움
 const COLLECT_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const DWELL_MS = 2000; // 거리+응시 조건을 이만큼 끊기지 않고 유지해야 조각을 채움
@@ -65,15 +66,23 @@ const RING_RADIUS_OUTER = 0.3;
 let puzzleTargets = []; // { el, worldPos, index, collected, gazeStartedAt }
 
 // TODO: plane placeholder를 실제 조각 3D 모델(glb 등)로 교체 가능.
+//
+// 조각별로 각도를 완전히 독립적으로 무작위 추출하면(예전 방식) n=4처럼 표본이 적을 때
+// 우연히 비슷한 방향에 몰릴 수 있다. 360도를 조각 수만큼 구역(섹터)으로 나눠 조각마다
+// 자기 구역 안에서만 각도를 무작위로 정해서 서로 겹치지 않게 최소 각도 차이를 보장한다.
 function spawnPuzzleTargets() {
+  const sectorAngle = (Math.PI * 2) / PIECE_NAMES.length;
+  // 매 판마다 배치 방향 자체를 통째로 돌려서, 항상 같은 방향(예: 정북)에 조각이 나오지 않게 함.
+  const layoutRotation = Math.random() * Math.PI * 2;
+
   PIECE_NAMES.forEach((name, index) => {
+    const angle = layoutRotation + sectorAngle * (index + 0.5)
+      + (Math.random() * 2 - 1) * sectorAngle * 0.3;
     const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos((Math.random() * 2) - 1);
     const worldPos = {
-      x: radius * Math.sin(phi) * Math.cos(theta),
-      y: SPAWN_HEIGHT_OFFSET_M + radius * Math.sin(phi) * Math.sin(theta) * 0.4, // 세로 범위는 좀 좁게
-      z: radius * Math.cos(phi),
+      x: radius * Math.cos(angle),
+      y: SPAWN_HEIGHT_OFFSET_M + (Math.random() * 2 - 1) * SPAWN_HEIGHT_VARIATION_M,
+      z: radius * Math.sin(angle),
     };
 
     const el = document.createElement('a-entity');
