@@ -1,13 +1,15 @@
 // AR Scene: 얼음 깨고 장생이 구하기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를
-// 추적해서 사용자 주변에 얼음 오브젝트(placeholder — 반투명 박스 안에 장생이 마스코트
-// placeholder 박스가 들어있는 형태)를 배치한다. 사용자가 실제로 일정 거리 안까지 다가오면 그
-// 얼음을 화면 앞에 고정(lock)시키고, lock된 동안에만 XR8.CameraPixelArray로 카메라 프레임을
-// 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로 인정되고,
-// 잡은 채로 손을 흔들면 얼음이 깨지면서(이펙트 재생) 장생이가 구조된다.
+// 추적해서 사용자 주변에 얼음 오브젝트(3D 모델, `assets/models/Ice.glb`)를 배치한다. 그 안에
+// 들어있는 장생이 마스코트는 아직 모델이 없어 박스 placeholder로 대체돼 있다. 사용자가 실제로
+// 일정 거리 안까지 다가오면 그 얼음을 화면 앞에 고정(lock)시키고, lock된 동안에만
+// XR8.CameraPixelArray로 카메라 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기
+// 존)에 잠깐 유지하면 "잡기"로 인정되고, 잡은 채로 손을 흔들면 얼음이 깨지면서(이펙트 재생)
+// 장생이가 구조된다.
 //
-// 얼음/장생이 그림 리소스가 아직 없어서 이번 구현은 도형+색상 placeholder로 전체 상태
-// 흐름(잠금→잡기→흔들기→깨짐)을 완성해뒀다. 나중에 그림이 준비되면 iceEl/mascotEl의
-// geometry/material만 이미지 텍스처로 바꿔치면 된다.
+// 얼음 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
+// 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
+// 내보내도 코드 수정 없이 항상 일관된 크기로 보인다. 장생이 모델이 준비되면 mascotEl도 같은
+// 방식으로 교체하면 된다.
 //
 // 퍼즐 모드(index.html)도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리돼 있다.
 
@@ -100,8 +102,31 @@ let iceItems = []; // { el, iceEl, mascotEl, worldPos, grabbed, removed }
 let lockedItem = null;
 let rescuedCount = 0;
 
-// placeholder: 반투명 얼음 박스 안에 장생이 마스코트 박스를 넣어둔 형태.
-// 나중에 그림이 준비되면 iceEl/mascotEl의 geometry/material을 이미지 텍스처로 교체.
+const ICE_MODEL_URL = '../assets/models/Ice.glb';
+const ICE_MODEL_TARGET_SIZE_M = 0.35; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
+
+// glb 원본의 스케일/피벗은 만든 툴마다 제각각이라, 로드된 실제 바운딩 박스를 기준으로
+// 크기를 목표 치수에 맞게 자동 스케일하고 중심을 엔티티 원점에 맞춰준다. 이렇게 해두면
+// 모델을 나중에 다시 내보내도(스케일이 바뀌어도) 코드 수정 없이 항상 일관된 크기로 보인다.
+function fitLoadedModel(el, targetSizeM) {
+  el.addEventListener('model-loaded', (e) => {
+    const mesh = (e.detail && e.detail.model) || el.getObject3D('mesh');
+    if (!mesh) return;
+    const box = new AFRAME.THREE.Box3().setFromObject(mesh);
+    const size = new AFRAME.THREE.Vector3();
+    const center = new AFRAME.THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    const maxDim = Math.max(size.x, size.y, size.z);
+    if (maxDim <= 0) return;
+    const scale = targetSizeM / maxDim;
+    mesh.scale.multiplyScalar(scale);
+    mesh.position.sub(center.multiplyScalar(scale));
+  });
+}
+
+// placeholder: 장생이 마스코트는 아직 모델이 없어서 박스로 넣어둔 형태.
+// 그림/모델이 준비되면 mascotEl도 iceEl과 같은 방식(gltf-model + fitLoadedModel)으로 교체.
 function spawnIceItems() {
   for (let i = 0; i < RESCUE_COUNT; i++) {
     const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
@@ -117,8 +142,8 @@ function spawnIceItems() {
     wrapper.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
 
     const iceEl = document.createElement('a-entity');
-    iceEl.setAttribute('geometry', 'primitive: box; width: 0.3; height: 0.3; depth: 0.3');
-    iceEl.setAttribute('material', 'color: #bfe8ff; opacity: 0.55; transparent: true');
+    iceEl.setAttribute('gltf-model', `url(${ICE_MODEL_URL})`);
+    fitLoadedModel(iceEl, ICE_MODEL_TARGET_SIZE_M);
     wrapper.appendChild(iceEl);
 
     const mascotEl = document.createElement('a-entity');
@@ -202,9 +227,10 @@ const GRAB_DWELL_MS = 400; // 이 시간만큼 잡기 존 안에 머물러야 "�
 
 let grabDwellStartedAt = null;
 
+// gltf-model은 A-Frame의 material 컴포넌트로 색을 바꿀 수 없어서(모델 자체 재질을 쓰므로),
+// 잡았을 때 피드백은 스케일 변화로만 표현한다.
 function onGrab(item) {
   item.grabbed = true;
-  item.iceEl.setAttribute('material', 'color', '#8fd8ff');
   item.iceEl.setAttribute('scale', '1.15 1.15 1.15');
   trashHintEl.textContent = '손을 흔들어서 얼음을 깨보세요!';
   if (DEBUG) debugLog('grab: item grabbed');
@@ -212,7 +238,6 @@ function onGrab(item) {
 
 function onRelease(item) {
   item.grabbed = false;
-  item.iceEl.setAttribute('material', 'color', '#bfe8ff');
   item.iceEl.setAttribute('scale', '1 1 1');
   shakeHistory = [];
   trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
