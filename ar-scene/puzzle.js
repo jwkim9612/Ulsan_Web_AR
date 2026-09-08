@@ -99,11 +99,13 @@ function dist(a, b) {
 }
 
 // 조각 이미지가 항상 잘 보이도록, 수직 기울임 없이(Y축 기준) 카메라 쪽을 바라보게 매 프레임 회전.
-// plane 정면(+Z)이 카메라를 향하도록 lookAt(-Z가 타겟을 보게 함) 후 180도 뒤집는다.
+// 카메라와 달리 일반 오브젝트(mesh)의 lookAt()은 로컬 +Z축이 타겟을 향하게 만든다 — plane의
+// 정면도 원래 +Z라서 lookAt()만으로 이미 정면이 카메라를 향한다. (여기에 180도를 더 돌리면
+// 정면이 반대로 돌아가 뒷면이 보이는데, side:double이라 뒷면도 렌더링은 되지만 같은 텍스처가
+// 좌우반전으로 보이게 된다 — 실제로 겪었던 버그.)
 function faceCamera(t, camPos) {
   const lookTarget = new AFRAME.THREE.Vector3(camPos.x, t.worldPos.y, camPos.z);
   t.el.object3D.lookAt(lookTarget);
-  t.el.object3D.rotateY(Math.PI);
 }
 
 function checkProximity(camPos, camRot) {
