@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Ulsan_AR - 쓰레기줍기</title>
+  <title>Ulsan_AR - 고래구조</title>
 
   <!-- A-Frame 빌드(8th Wall 전용, 8thwall/aframe-image-targets-example 공식 예제에서 그대로 가져옴) -->
   <script crossorigin="anonymous" src="vendor/8frame-1.5.0.min.js"></script>
@@ -14,8 +14,8 @@
   <!-- 위 8th Wall 번들들이 영어로 그려 넣는 카메라/모션 센서 권한 안내 문구를 한글로 바꿔치기 -->
   <script src="localize-8thwall-ui.js"></script>
 
-  <!-- 쓰다듬기 판정 = MediaPipe Hands(구글, 무료). World Tracking이 이미 잡고 있는 카메라 프레임을
-       XR8.CameraPixelArray로 넘겨받아 쓰므로 별도 getUserMedia(camera_utils)는 필요 없음. -->
+  <!-- 잡기/흔들기 판정 = MediaPipe Hands(구글, 무료). World Tracking이 이미 잡고 있는 카메라
+       프레임을 XR8.CameraPixelArray로 넘겨받아 쓰므로 별도 getUserMedia(camera_utils)는 필요 없음. -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 
@@ -85,12 +85,12 @@
 
   <div id="mode-panel">
     <button id="mode-puzzle">퍼즐</button>
-    <button id="mode-trash" class="active">쓰레기줍기</button>
+    <button id="mode-trash" class="active">고래구조</button>
   </div>
 
-  <div id="trash-count"><span id="trash-count-text">0/5</span></div>
+  <div id="trash-count"><span id="trash-count-text">0/3</span></div>
   <div id="trash-hint"></div>
-  <div id="trash-finished">쓰레기를 다 치웠어요!</div>
+  <div id="trash-finished">장생이를 모두 구했어요!</div>
 
   <script src="trash.js"></script>
 </body>

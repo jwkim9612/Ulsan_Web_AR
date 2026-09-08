@@ -1,7 +1,13 @@
-// AR Scene: 쓰레기줍기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를 추적해서 사용자 주변에
-// 3D 오브젝트(현재는 placeholder 큐브)를 배치하고, 사용자가 실제로 일정 거리 안까지 다가오면 그
-// 오브젝트를 화면 앞에 고정(lock)시킨다. lock된 동안에만 XR8.CameraPixelArray로 카메라 프레임을
-// 받아 MediaPipe Hands에 넘기고, 손바닥을 쓰다듬는 동작을 감지하면 그 오브젝트를 없앤다.
+// AR Scene: 얼음 깨고 장생이 구하기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를
+// 추적해서 사용자 주변에 얼음 오브젝트(placeholder — 반투명 박스 안에 장생이 마스코트
+// placeholder 박스가 들어있는 형태)를 배치한다. 사용자가 실제로 일정 거리 안까지 다가오면 그
+// 얼음을 화면 앞에 고정(lock)시키고, lock된 동안에만 XR8.CameraPixelArray로 카메라 프레임을
+// 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로 인정되고,
+// 잡은 채로 손을 흔들면 얼음이 깨지면서(이펙트 재생) 장생이가 구조된다.
+//
+// 얼음/장생이 그림 리소스가 아직 없어서 이번 구현은 도형+색상 placeholder로 전체 상태
+// 흐름(잠금→잡기→흔들기→깨짐)을 완성해뒀다. 나중에 그림이 준비되면 iceEl/mascotEl의
+// geometry/material만 이미지 텍스처로 바꿔치면 된다.
 //
 // 퍼즐 모드(index.html)도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리돼 있다.
 
@@ -25,7 +31,7 @@ const debugState = {
   framesSent: 0,
   resultsReceived: 0,
   lastLandmarkCount: 0,
-  lastPet: null,
+  lastShake: null,
   log: [], // 최근 이벤트/에러 스크롤 로그
 };
 let debugOverlayEl = null;
@@ -37,9 +43,9 @@ function debugLog(msg) {
 }
 function renderDebugOverlay() {
   debugOverlayEl.textContent =
-    `pipeline:${debugState.pipelineStatus} cvActive:${debugState.cvActive} locked:${debugState.locked}\n` +
+    `pipeline:${debugState.pipelineStatus} cvActive:${debugState.cvActive} locked:${debugState.locked} grabbed:${lockedItem ? lockedItem.grabbed : '-'}\n` +
     `framesSent:${debugState.framesSent} sendResolved:${debugState.sendResolved || 0} resultsRecv:${debugState.resultsReceived} landmarks:${debugState.lastLandmarkCount}\n` +
-    `pet:${debugState.lastPet ? JSON.stringify(debugState.lastPet) : '-'}\n` +
+    `shake:${debugState.lastShake ? JSON.stringify(debugState.lastShake) : '-'}\n` +
     `--- log ---\n${debugState.log.join('\n')}`;
 }
 if (DEBUG) {
@@ -78,7 +84,7 @@ resizeHandCanvas();
 window.addEventListener('resize', resizeHandCanvas);
 
 // --- 오브젝트 배치 및 거리/응시 판정 ---
-const TRASH_COUNT = 5;
+const RESCUE_COUNT = 3;
 const SPAWN_MIN_M = 1.2;
 const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터. 스케일 추정 오차가
                           // 거리에 비례해서 커지므로 너무 멀리 두면 "가까워져도 거리가 안 줄어드는"
@@ -90,13 +96,14 @@ const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 �
 const LOCK_FORWARD_OFFSET_M = 1.0; // lock되면 카메라 앞 이 거리에 고정(너무 가까워 커 보이지 않게)
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
-let trashItems = []; // { el, worldPos: {x,y,z}, removed }
+let iceItems = []; // { el, iceEl, mascotEl, worldPos, grabbed, removed }
 let lockedItem = null;
-let removedCount = 0;
+let rescuedCount = 0;
 
-// TODO: BoxGeometry placeholder를 실제 쓰레기 3D 모델(glb 등)로 교체.
-function spawnTrashItems() {
-  for (let i = 0; i < TRASH_COUNT; i++) {
+// placeholder: 반투명 얼음 박스 안에 장생이 마스코트 박스를 넣어둔 형태.
+// 나중에 그림이 준비되면 iceEl/mascotEl의 geometry/material을 이미지 텍스처로 교체.
+function spawnIceItems() {
+  for (let i = 0; i < RESCUE_COUNT; i++) {
     const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos((Math.random() * 2) - 1);
@@ -106,16 +113,28 @@ function spawnTrashItems() {
       z: radius * Math.cos(phi),
     };
 
-    const el = document.createElement('a-entity');
-    el.setAttribute('geometry', 'primitive: box; width: 0.3; height: 0.3; depth: 0.3');
-    el.setAttribute('material', 'color: #99cc66');
-    el.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
-    trashRoot.appendChild(el);
+    const wrapper = document.createElement('a-entity');
+    wrapper.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
 
-    trashItems.push({ el, worldPos, removed: false });
+    const iceEl = document.createElement('a-entity');
+    iceEl.setAttribute('geometry', 'primitive: box; width: 0.3; height: 0.3; depth: 0.3');
+    iceEl.setAttribute('material', 'color: #bfe8ff; opacity: 0.55; transparent: true');
+    wrapper.appendChild(iceEl);
+
+    const mascotEl = document.createElement('a-entity');
+    mascotEl.setAttribute('geometry', 'primitive: box; width: 0.14; height: 0.14; depth: 0.14');
+    mascotEl.setAttribute('material', 'color: #2d3a66; transparent: true');
+    mascotEl.setAttribute('visible', false); // 깨지기 전까지는 숨김
+    wrapper.appendChild(mascotEl);
+
+    trashRoot.appendChild(wrapper);
+
+    iceItems.push({
+      el: wrapper, iceEl, mascotEl, worldPos, grabbed: false, removed: false,
+    });
   }
   updateTrashCountText();
-  trashHintEl.textContent = '쓰레기 쪽으로 다가가 보세요';
+  trashHintEl.textContent = '얼음 쪽으로 다가가 보세요';
 }
 
 function dist(a, b) {
@@ -128,14 +147,14 @@ function updateLock(camPos, camRot) {
     forward = new AFRAME.THREE.Vector3(0, 0, -1)
       .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
   } catch (e) {
-    console.error('[trash] 카메라 방향 계산 실패', e);
+    console.error('[ice] 카메라 방향 계산 실패', e);
     if (DEBUG) debugLog(`camera orientation failed: ${(e && e.message) || e}`);
     return;
   }
 
   if (!lockedItem) {
     // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
-    const candidate = trashItems.find((t) => {
+    const candidate = iceItems.find((t) => {
       if (t.removed || dist(camPos, t.worldPos) >= LOCK_DISTANCE_M) return false;
       const toItem = new AFRAME.THREE.Vector3(
         t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
@@ -144,14 +163,17 @@ function updateLock(camPos, camRot) {
     });
     if (candidate) {
       lockedItem = candidate;
-      trashHintEl.textContent = '쓰다듬어서 치워보세요';
+      lockedItem.grabbed = false;
+      grabDwellStartedAt = null;
+      shakeHistory = [];
+      trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
       if (DEBUG) debugState.locked = true;
       onLockStart();
     }
     return;
   }
 
-  // 멀어져도 락은 안 풀린다 — 쓰다듬어서 없애기 전까지는 계속 눈앞에 고정.
+  // 멀어져도 락은 안 풀린다 — 깨기 전까지는 계속 눈앞에 고정.
   lockedItem.el.object3D.position.set(
     camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
     camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
@@ -159,25 +181,8 @@ function updateLock(camPos, camRot) {
   );
 }
 
-function removeLockedItem() {
-  if (!lockedItem) return;
-  lockedItem.el.remove();
-  lockedItem.removed = true;
-  onLockEnd();
-  lockedItem = null;
-  removedCount++;
-  updateTrashCountText();
-
-  if (removedCount === TRASH_COUNT) {
-    trashHintEl.textContent = '';
-    trashFinishedEl.style.display = 'block';
-  } else {
-    trashHintEl.textContent = '쓰레기 쪽으로 다가가 보세요';
-  }
-}
-
 function updateTrashCountText() {
-  trashCountText.textContent = `${removedCount}/${TRASH_COUNT}`;
+  trashCountText.textContent = `${rescuedCount}/${RESCUE_COUNT}`;
 }
 
 const distanceTrackerModule = {
@@ -188,41 +193,134 @@ const distanceTrackerModule = {
   },
 };
 
-// --- 쓰다듬기 감지 (기존 ar-scene 손 인식 모드와 동일한 순수 판정 로직) ---
-// 손바닥 중앙(랜드마크 9번, 중지 뿌리)의 좌표를 최근 PET_HISTORY_MS만큼 기록해두고,
-// 그 안에서 방향이 여러 번 바뀌면서도 좁은 범위 안에 머물러 있으면 "쓰다듬기"로 판정.
-const PET_HISTORY_MS = 1500;
-const PET_MIN_REVERSALS = 2;
-const PET_MIN_MOVE = 0.005;
-const PET_MAX_SPREAD = 0.3;
-const PET_COOLDOWN_MS = 1000;
+// --- 잡기(grab) 판정 ---
+// lock된 오브젝트는 항상 카메라 정면 고정 거리에 위치하므로, 화면 어디에 있는지 매번 계산할
+// 필요 없이 손 랜드마크의 정규화 좌표(0~1)가 화면 중앙 근처(잡기 존)에 있는지만 보면 된다.
+const GRAB_ZONE_MIN = 0.35;
+const GRAB_ZONE_MAX = 0.65;
+const GRAB_DWELL_MS = 400; // 이 시간만큼 잡기 존 안에 머물러야 "잡기"로 인정(실수 방지)
 
-let petHistory = [];
-let lastPetTime = 0;
+let grabDwellStartedAt = null;
 
-function checkPetting(x, y, now) {
-  petHistory.push({ x, y, t: now });
-  petHistory = petHistory.filter((p) => now - p.t <= PET_HISTORY_MS);
-  if (petHistory.length < 4) return false;
+function onGrab(item) {
+  item.grabbed = true;
+  item.iceEl.setAttribute('material', 'color', '#8fd8ff');
+  item.iceEl.setAttribute('scale', '1.15 1.15 1.15');
+  trashHintEl.textContent = '손을 흔들어서 얼음을 깨보세요!';
+  if (DEBUG) debugLog('grab: item grabbed');
+}
+
+function onRelease(item) {
+  item.grabbed = false;
+  item.iceEl.setAttribute('material', 'color', '#bfe8ff');
+  item.iceEl.setAttribute('scale', '1 1 1');
+  shakeHistory = [];
+  trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
+  if (DEBUG) debugLog('grab: released (moved out of zone)');
+}
+
+// --- 흔들기(shake) 판정 (기존 ar-scene 손 인식 모드의 쓰다듬기 판정과 같은 원리) ---
+// 손바닥 중앙(랜드마크 9번, 중지 뿌리)의 좌표를 최근 SHAKE_HISTORY_MS만큼 기록해두고,
+// 그 안에서 방향이 여러 번 바뀌면 "흔들기"로 판정. 쓰다듬기보다 더 크고 빠른 움직임을
+// 기대하는 동작이라 허용 진폭(SHAKE_MAX_SPREAD)과 최소 이동량(SHAKE_MIN_MOVE)을 더 크게 잡음.
+const SHAKE_HISTORY_MS = 900;
+const SHAKE_MIN_REVERSALS = 3;
+const SHAKE_MIN_MOVE = 0.02;
+const SHAKE_MAX_SPREAD = 0.5;
+const BREAK_COOLDOWN_MS = 1000;
+
+let shakeHistory = [];
+let lastBreakTime = 0;
+
+function checkShake(x, y, now) {
+  shakeHistory.push({ x, y, t: now });
+  shakeHistory = shakeHistory.filter((p) => now - p.t <= SHAKE_HISTORY_MS);
+  if (shakeHistory.length < 4) return false;
 
   let reversals = 0;
   let prevDir = 0;
-  for (let i = 1; i < petHistory.length; i++) {
-    const dx = petHistory[i].x - petHistory[i - 1].x;
-    const dy = petHistory[i].y - petHistory[i - 1].y;
+  for (let i = 1; i < shakeHistory.length; i++) {
+    const dx = shakeHistory[i].x - shakeHistory[i - 1].x;
+    const dy = shakeHistory[i].y - shakeHistory[i - 1].y;
     const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
-    if (Math.abs(delta) < PET_MIN_MOVE) continue;
+    if (Math.abs(delta) < SHAKE_MIN_MOVE) continue;
     const dir = delta > 0 ? 1 : -1;
     if (prevDir !== 0 && dir !== prevDir) reversals++;
     prevDir = dir;
   }
 
-  const xs = petHistory.map((p) => p.x);
-  const ys = petHistory.map((p) => p.y);
+  const xs = shakeHistory.map((p) => p.x);
+  const ys = shakeHistory.map((p) => p.y);
   const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
 
-  if (DEBUG) debugState.lastPet = { reversals, spread: Number(spread.toFixed(4)) };
-  return reversals >= PET_MIN_REVERSALS && spread <= PET_MAX_SPREAD;
+  if (DEBUG) debugState.lastShake = { reversals, spread: Number(spread.toFixed(4)) };
+  return reversals >= SHAKE_MIN_REVERSALS && spread <= SHAKE_MAX_SPREAD;
+}
+
+// --- 깨짐 이펙트 (placeholder: 그림 없이 도형 애니메이션으로 구현) ---
+const BREAK_EFFECT_MS = 800;
+const SHARD_COUNT = 7;
+
+function spawnShards(wrapper) {
+  for (let i = 0; i < SHARD_COUNT; i++) {
+    const shard = document.createElement('a-entity');
+    shard.setAttribute('geometry', 'primitive: plane; width: 0.06; height: 0.06');
+    shard.setAttribute('material', 'color: #bfe8ff; opacity: 0.9; transparent: true; side: double');
+    shard.setAttribute('position', '0 0 0');
+
+    const angle = Math.random() * Math.PI * 2;
+    const flyDist = 0.25 + Math.random() * 0.25;
+    const toX = Math.cos(angle) * flyDist;
+    const toY = (Math.random() * 2 - 1) * flyDist;
+    const toZ = Math.sin(angle) * flyDist;
+
+    shard.setAttribute('animation__fly', `property: position; to: ${toX} ${toY} ${toZ}; dur: ${BREAK_EFFECT_MS}; easing: easeOutQuad`);
+    shard.setAttribute('animation__fade', `property: material.opacity; to: 0; dur: ${BREAK_EFFECT_MS}; easing: easeInQuad`);
+    shard.setAttribute(
+      'animation__spin',
+      `property: rotation; to: ${Math.random() * 360} ${Math.random() * 360} ${Math.random() * 360}; dur: ${BREAK_EFFECT_MS}; easing: linear`,
+    );
+
+    wrapper.appendChild(shard);
+  }
+}
+
+function breakLockedItem() {
+  const item = lockedItem;
+  if (!item) return;
+
+  item.removed = true;
+  lockedItem = null;
+  onLockEnd();
+
+  item.iceEl.setAttribute('visible', false);
+  spawnShards(item.el);
+
+  item.mascotEl.setAttribute('visible', true);
+  item.mascotEl.setAttribute(
+    'animation__escape',
+    `property: position; to: 0 0.6 0; dur: ${BREAK_EFFECT_MS}; easing: easeOutQuad`,
+  );
+  item.mascotEl.setAttribute(
+    'animation__escape-fade',
+    `property: material.opacity; from: 1; to: 0; delay: ${Math.round(BREAK_EFFECT_MS * 0.4)}; dur: ${Math.round(BREAK_EFFECT_MS * 0.6)}; easing: easeInQuad`,
+  );
+
+  setTimeout(() => {
+    item.el.remove();
+  }, BREAK_EFFECT_MS + 50);
+
+  rescuedCount++;
+  updateTrashCountText();
+
+  if (rescuedCount === RESCUE_COUNT) {
+    setTimeout(() => {
+      trashHintEl.textContent = '';
+      trashFinishedEl.style.display = 'block';
+    }, BREAK_EFFECT_MS);
+  } else {
+    trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';
+  }
 }
 
 const hands = new Hands({
@@ -242,7 +340,8 @@ hands.onResults((results) => {
   const hasHand = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
   if (DEBUG) debugState.lastLandmarkCount = hasHand ? results.multiHandLandmarks[0].length : 0;
   if (!hasHand) {
-    petHistory = [];
+    grabDwellStartedAt = null;
+    shakeHistory = [];
     return;
   }
 
@@ -251,12 +350,31 @@ hands.onResults((results) => {
     drawLandmarks(handCtx, landmarks, { color: '#ffffff', fillColor: '#2ea5ff', radius: 4 });
   }
 
+  if (!lockedItem) return;
+
   const palm = results.multiHandLandmarks[0][9];
   const now = performance.now();
-  if (checkPetting(palm.x, palm.y, now) && now - lastPetTime > PET_COOLDOWN_MS) {
-    lastPetTime = now;
-    petHistory = [];
-    removeLockedItem();
+  const inZone = palm.x >= GRAB_ZONE_MIN && palm.x <= GRAB_ZONE_MAX
+    && palm.y >= GRAB_ZONE_MIN && palm.y <= GRAB_ZONE_MAX;
+
+  if (!lockedItem.grabbed) {
+    if (!inZone) { grabDwellStartedAt = null; return; }
+    if (grabDwellStartedAt === null) { grabDwellStartedAt = now; return; }
+    if (now - grabDwellStartedAt < GRAB_DWELL_MS) return;
+    grabDwellStartedAt = null;
+    onGrab(lockedItem);
+    return;
+  }
+
+  if (!inZone) {
+    onRelease(lockedItem);
+    return;
+  }
+
+  if (checkShake(palm.x, palm.y, now) && now - lastBreakTime > BREAK_COOLDOWN_MS) {
+    lastBreakTime = now;
+    shakeHistory = [];
+    breakLockedItem();
   }
 });
 
@@ -323,7 +441,7 @@ const cvModule = {
       }
     } catch (e) {
       sendInFlight = false;
-      console.error('[trash] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
+      console.error('[ice] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
       debugLog(`send failed: ${(e && e.message) || e}`);
     }
   },
@@ -346,14 +464,14 @@ function onLockStart() {
     cvActive = true;
     if (DEBUG) { debugState.pipelineStatus = 'ok'; debugState.cvActive = true; debugLog('pipeline registered ok'); }
   } catch (e) {
-    console.error('[trash] CameraPixelArray 파이프라인 모듈 등록 실패 — 쓰다듬기 인식 없이 진행', e);
+    console.error('[ice] CameraPixelArray 파이프라인 모듈 등록 실패 — 잡기/흔들기 인식 없이 진행', e);
     cvActive = false;
     if (DEBUG) { debugState.pipelineStatus = 'failed'; debugLog(`pipeline register failed: ${(e && e.message) || e}`); }
   }
 }
 
 // MediaPipe Hands는 wasm/모델 파일을 첫 send() 시점에야 지연 로딩한다. 이걸 락 거는 순간까지
-// 미뤄두면 사용자가 처음 쓰다듬으려는 바로 그 순간 로딩 렉을 그대로 겪게 되므로, 스캔 대기
+// 미뤄두면 사용자가 처음 손을 뻗으려는 바로 그 순간 로딩 렉을 그대로 겪게 되므로, 스캔 대기
 // 시간(SCALE_SETTLE_MS) 동안 더미 프레임을 한 번 보내 미리 로딩해둔다.
 function warmupHands() {
   if (sendInFlight) return;
@@ -377,14 +495,15 @@ function onLockEnd() {
       XR8.removeCameraPipelineModule('trash-cv');
       XR8.removeCameraPipelineModule('camerapixelarray');
     } catch (e) {
-      console.error('[trash] CameraPixelArray 파이프라인 모듈 해제 실패', e);
+      console.error('[ice] CameraPixelArray 파이프라인 모듈 해제 실패', e);
       if (DEBUG) debugLog(`pipeline unregister failed: ${(e && e.message) || e}`);
     }
     cvActive = false;
   }
   if (DEBUG) { debugState.cvActive = false; debugState.locked = false; debugState.pipelineStatus = 'idle'; }
   handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-  petHistory = [];
+  grabDwellStartedAt = null;
+  shakeHistory = [];
 }
 
 // --- 초기화 ---
@@ -400,7 +519,7 @@ const onxrloaded = () => {
 
   trashHintEl.textContent = '천천히 주변을 비춰서 스캔해주세요...';
   warmupHands(); // 스캔 대기 시간에 묻혀서 사용자는 로딩 렉을 못 느끼게
-  setTimeout(spawnTrashItems, SCALE_SETTLE_MS);
+  setTimeout(spawnIceItems, SCALE_SETTLE_MS);
 };
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
