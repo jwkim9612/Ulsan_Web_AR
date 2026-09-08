@@ -16,6 +16,7 @@
 const backBtn = document.getElementById('back-btn');
 const modePuzzleBtn = document.getElementById('mode-puzzle');
 const trashRoot = document.getElementById('trash-root');
+const cameraEl = document.querySelector('a-camera');
 const trashCountText = document.getElementById('trash-count-text');
 const trashHintEl = document.getElementById('trash-hint');
 const trashFinishedEl = document.getElementById('trash-finished');
@@ -166,14 +167,23 @@ function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
-function updateLock(camPos, camRot) {
+// 카메라 포즈는 XR8 파이프라인 콜백이 주는 processCpuResult.reality가 아니라 실제 렌더링에
+// 쓰이는 a-camera의 object3D에서 직접 읽는다. 파이프라인 콜백 값은 렌더링에 실제로 쓰인
+// 그 프레임의 포즈와 타이밍/보정이 미묘하게 어긋날 수 있는데, 그 어긋남만큼 lock된
+// 오브젝트가 화면 중앙이 아니라 한쪽으로 쏠려 보이거나(왼쪽/오른쪽 고정) 사용자가 계속
+// 움직이는 동안 그 오차가 누적돼 점점 화면 밖으로 밀려나는 것처럼 보이는 원인이었다.
+// a-camera 자체에서 읽으면 렌더링에 쓰인 포즈와 항상 정확히 일치한다.
+function updateLock() {
+  const camPos = new AFRAME.THREE.Vector3();
+  const camQuat = new AFRAME.THREE.Quaternion();
   let forward;
   try {
-    forward = new AFRAME.THREE.Vector3(0, 0, -1)
-      .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
+    cameraEl.object3D.getWorldPosition(camPos);
+    cameraEl.object3D.getWorldQuaternion(camQuat);
+    forward = new AFRAME.THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
   } catch (e) {
-    console.error('[ice] 카메라 방향 계산 실패', e);
-    if (DEBUG) debugLog(`camera orientation failed: ${(e && e.message) || e}`);
+    console.error('[ice] 카메라 위치/방향 계산 실패', e);
+    if (DEBUG) debugLog(`camera pose failed: ${(e && e.message) || e}`);
     return;
   }
 
@@ -213,8 +223,8 @@ function updateTrashCountText() {
 const distanceTrackerModule = {
   name: 'trash-distance-tracker',
   onUpdate: ({ processCpuResult }) => {
-    if (!processCpuResult.reality) return;
-    updateLock(processCpuResult.reality.position, processCpuResult.reality.rotation);
+    if (!processCpuResult.reality) return; // 트래킹이 아직 준비 안 된 경우를 걸러내는 용도로만 사용
+    updateLock();
   },
 };
 
