@@ -1,15 +1,14 @@
 // AR Scene: 얼음 깨고 장생이 구하기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를
 // 추적해서 사용자 주변에 얼음 오브젝트(3D 모델, `assets/models/Ice.glb`)를 배치한다. 그 안에
-// 들어있는 장생이 마스코트는 아직 모델이 없어 박스 placeholder로 대체돼 있다. 사용자가 실제로
-// 일정 거리 안까지 다가오면 그 얼음을 화면 앞에 고정(lock)시키고, lock된 동안에만
+// 들어있는 장생이 마스코트도 3D 모델(`assets/models/Jangsaengi.glb`)로 구현돼 있다. 사용자가
+// 실제로 일정 거리 안까지 다가오면 그 얼음을 화면 앞에 고정(lock)시키고, lock된 동안에만
 // XR8.CameraPixelArray로 카메라 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기
 // 존)에 잠깐 유지하면 "잡기"로 인정되고, 잡은 채로 손을 흔들면 얼음이 깨지면서(이펙트 재생)
 // 장생이가 구조된다.
 //
-// 얼음 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
+// 두 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
 // 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
-// 내보내도 코드 수정 없이 항상 일관된 크기로 보인다. 장생이 모델이 준비되면 mascotEl도 같은
-// 방식으로 교체하면 된다.
+// 내보내도 코드 수정 없이 항상 일관된 크기로 보인다.
 //
 // 퍼즐 모드(index.html)도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리돼 있다.
 
@@ -106,6 +105,9 @@ let rescuedCount = 0;
 const ICE_MODEL_URL = '../assets/models/Ice.glb';
 const ICE_MODEL_TARGET_SIZE_M = 0.35; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
 
+const MASCOT_MODEL_URL = '../assets/models/Jangsaengi.glb';
+const MASCOT_MODEL_TARGET_SIZE_M = 0.2; // 얼음(0.35m)보다 한 단계 작게 — 얼음 속에 들어있는 느낌
+
 // glb 원본의 스케일/피벗은 만든 툴마다 제각각이라, 로드된 실제 바운딩 박스를 기준으로
 // 크기를 목표 치수에 맞게 자동 스케일하고 중심을 엔티티 원점에 맞춰준다. 이렇게 해두면
 // 모델을 나중에 다시 내보내도(스케일이 바뀌어도) 코드 수정 없이 항상 일관된 크기로 보인다.
@@ -126,8 +128,6 @@ function fitLoadedModel(el, targetSizeM) {
   });
 }
 
-// placeholder: 장생이 마스코트는 아직 모델이 없어서 박스로 넣어둔 형태.
-// 그림/모델이 준비되면 mascotEl도 iceEl과 같은 방식(gltf-model + fitLoadedModel)으로 교체.
 function spawnIceItems() {
   for (let i = 0; i < RESCUE_COUNT; i++) {
     const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
@@ -148,8 +148,8 @@ function spawnIceItems() {
     wrapper.appendChild(iceEl);
 
     const mascotEl = document.createElement('a-entity');
-    mascotEl.setAttribute('geometry', 'primitive: box; width: 0.14; height: 0.14; depth: 0.14');
-    mascotEl.setAttribute('material', 'color: #2d3a66; transparent: true');
+    mascotEl.setAttribute('gltf-model', `url(${MASCOT_MODEL_URL})`);
+    fitLoadedModel(mascotEl, MASCOT_MODEL_TARGET_SIZE_M);
     mascotEl.setAttribute('visible', false); // 깨지기 전까지는 숨김
     wrapper.appendChild(mascotEl);
 
@@ -336,9 +336,11 @@ function breakLockedItem() {
     'animation__escape',
     `property: position; to: 0 0.6 0; dur: ${BREAK_EFFECT_MS}; easing: easeOutQuad`,
   );
+  // gltf-model 엔티티는 A-Frame의 material 컴포넌트를 쓰지 않아 material.opacity 애니메이션이
+  // 안 먹는다(244/251줄 grab 피드백이 scale을 쓰는 것과 같은 이유) — 대신 scale을 0으로 줄여서 사라지게 한다.
   item.mascotEl.setAttribute(
     'animation__escape-fade',
-    `property: material.opacity; from: 1; to: 0; delay: ${Math.round(BREAK_EFFECT_MS * 0.4)}; dur: ${Math.round(BREAK_EFFECT_MS * 0.6)}; easing: easeInQuad`,
+    `property: scale; to: 0.001 0.001 0.001; delay: ${Math.round(BREAK_EFFECT_MS * 0.4)}; dur: ${Math.round(BREAK_EFFECT_MS * 0.6)}; easing: easeInQuad`,
   );
 
   setTimeout(() => {
