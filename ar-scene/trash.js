@@ -103,7 +103,7 @@ let lockedItem = null;
 let rescuedCount = 0;
 
 const ICE_MODEL_URL = '../assets/models/Ice.glb';
-const ICE_MODEL_TARGET_SIZE_M = 0.35; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
+const ICE_MODEL_TARGET_SIZE_M = 0.45; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
 
 const MASCOT_MODEL_URL = '../assets/models/Jangsaengi.glb';
 const MASCOT_MODEL_TARGET_SIZE_M = 0.2; // 얼음(0.35m)보다 한 단계 작게 — 얼음 속에 들어있는 느낌
