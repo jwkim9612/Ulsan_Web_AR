@@ -95,12 +95,15 @@ const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 
                               // 보면 스케일 오차 때문에 절대 안 가까워지는 오브젝트가 생길 수 있어서,
                               // "바라보고 있는지"를 같이 봐서 느슨하게 함)
 const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
+const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지해야 실제로 고정됨(스치듯 지나가는 것 방지)
 const LOCK_FORWARD_OFFSET_M = 1.0; // lock되면 카메라 앞 이 거리에 고정(너무 가까워 커 보이지 않게)
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
 let iceItems = []; // { el, iceEl, mascotEl, worldPos, grabbed, removed }
 let lockedItem = null;
 let rescuedCount = 0;
+let lockCandidate = null; // 거리+응시 조건을 만족하기 시작한 얼음(아직 확정 lock 전)
+let lockCandidateStartedAt = null;
 
 const ICE_MODEL_URL = '../assets/models/Ice.glb';
 const ICE_MODEL_TARGET_SIZE_M = 0.45; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
@@ -196,15 +199,26 @@ function updateLock() {
       ).normalize();
       return toItem.dot(forward) >= LOCK_GAZE_DOT_THRESHOLD;
     });
-    if (candidate) {
-      lockedItem = candidate;
-      lockedItem.grabbed = false;
-      grabDwellStartedAt = null;
-      shakeHistory = [];
-      trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
-      if (DEBUG) debugState.locked = true;
-      onLockStart();
+
+    // 조건을 만족하는 순간 바로 lock하지 않고, LOCK_DWELL_MS만큼 그 얼음을 계속 바라보고
+    // 있어야 확정한다 — 스쳐 지나가듯 잠깐 조건을 만족한 것만으로 고정되는 걸 막기 위함.
+    if (candidate !== lockCandidate) {
+      lockCandidate = candidate || null;
+      lockCandidateStartedAt = candidate ? performance.now() : null;
+      return;
     }
+    if (!candidate) return;
+    if (performance.now() - lockCandidateStartedAt < LOCK_DWELL_MS) return;
+
+    lockedItem = candidate;
+    lockedItem.grabbed = false;
+    lockCandidate = null;
+    lockCandidateStartedAt = null;
+    grabDwellStartedAt = null;
+    shakeHistory = [];
+    trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
+    if (DEBUG) debugState.locked = true;
+    onLockStart();
     return;
   }
 
