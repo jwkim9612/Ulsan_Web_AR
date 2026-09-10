@@ -131,7 +131,11 @@ function fitLoadedModel(el, targetSizeM) {
     if (maxDim <= 0) return;
     const scale = targetSizeM / maxDim;
     mesh.scale.multiplyScalar(scale);
-    mesh.position.sub(center.multiplyScalar(scale));
+    // Box3.setFromObject()는 월드 좌표 기준 중심을 주지만 mesh.position은 부모(el) 기준
+    // 로컬 좌표라, wrapper가 이미 스폰 위치로 이동해 있으면 그 월드 이동값이 그대로 섞여
+    // 들어와 모델이 스폰 지점(=targetFx 위치)에서 밀려난다. 부모 로컬 좌표로 변환해서 상쇄한다.
+    const localCenter = mesh.parent.worldToLocal(center);
+    mesh.position.sub(localCenter.multiplyScalar(scale));
   });
 }
 
