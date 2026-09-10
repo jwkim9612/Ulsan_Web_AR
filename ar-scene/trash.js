@@ -308,21 +308,14 @@ let grabDwellStartedAt = null;
 
 // gltf-model은 A-Frame의 material 컴포넌트로 색을 바꿀 수 없어서(모델 자체 재질을 쓰므로),
 // 잡았을 때 피드백은 스케일 변화로만 표현한다. 타겟팅 상태(TARGETED_ICE_SCALE)보다 한 단계 더
-// 커져서(GRABBED_ICE_SCALE) "쥐었다"는 게 구분되고, 놓으면 타겟팅 상태 크기로 되돌아간다(0으로
-// 안 돌아가는 이유: 놓아도 여전히 타겟팅된 상태라 완전히 안 커진 크기로 돌아가면 어색함).
+// 커져서(GRABBED_ICE_SCALE) "쥐었다"는 게 구분된다. 한 번 잡으면(grabbed=true) 손이 잡기 존을
+// 벗어나도 "놓은 것"으로 되돌리지 않고 계속 흔들기 판정으로 넘어간다 — 깨는 도중 손이 살짝
+// 존을 벗어났다고 다시 잡기부터 시작해야 하면 답답하기 때문.
 function onGrab(item) {
   item.grabbed = true;
   item.iceEl.setAttribute('scale', `${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE}`);
   trashHintEl.textContent = '손을 흔들어서 얼음을 깨보세요!';
   if (DEBUG) debugLog('grab: item grabbed');
-}
-
-function onRelease(item) {
-  item.grabbed = false;
-  item.iceEl.setAttribute('scale', `${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE}`);
-  shakeHistory = [];
-  trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
-  if (DEBUG) debugLog('grab: released (moved out of zone)');
 }
 
 // --- 흔들기(shake) 판정 (기존 ar-scene 손 인식 모드의 쓰다듬기 판정과 같은 원리) ---
@@ -488,11 +481,7 @@ hands.onResults((results) => {
     return;
   }
 
-  if (!inZone) {
-    onRelease(lockedItem);
-    return;
-  }
-
+  // 이미 잡은 상태면 잡기 존을 벗어나도 놓은 것으로 취급하지 않고 그대로 흔들기 판정으로 넘어간다.
   if (checkShake(palm.x, palm.y, now) && now - lastBreakTime > BREAK_COOLDOWN_MS) {
     lastBreakTime = now;
     shakeHistory = [];
