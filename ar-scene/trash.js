@@ -1,7 +1,8 @@
 // AR Scene: 얼음 깨고 장생이 구하기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를
 // 추적해서 사용자 주변에 얼음 오브젝트(3D 모델, `assets/models/Ice.glb`)를 배치한다. 그 안에
 // 들어있는 장생이 마스코트도 3D 모델(`assets/models/Jangsaengi.glb`)로 구현돼 있다. 사용자가
-// 실제로 일정 거리 안까지 다가오면 그 얼음을 화면 앞에 고정(lock)시키고, lock된 동안에만
+// 실제로 일정 거리 안까지 다가와 그 얼음을 잠깐 바라보면 "타겟팅"되는데(화면 정면으로 옮겨지지
+// 않고 제자리에서 파티클 이펙트+살짝 커지는 것으로만 표시됨), 타겟팅된 동안에만
 // XR8.CameraPixelArray로 카메라 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기
 // 존)에 잠깐 유지하면 "잡기"로 인정되고, 잡은 채로 손을 흔들면 얼음이 깨지면서(이펙트 재생)
 // 장생이가 구조된다.
@@ -92,13 +93,15 @@ const SPAWN_MIN_M = 1.2;
 const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터. 스케일 추정 오차가
                           // 거리에 비례해서 커지므로 너무 멀리 두면 "가까워져도 거리가 안 줄어드는"
                           // 오브젝트가 생길 수 있어 범위를 좁게 잡음.
-const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 lock (순수 실측 거리만
-                              // 보면 스케일 오차 때문에 절대 안 가까워지는 오브젝트가 생길 수 있어서,
-                              // "바라보고 있는지"를 같이 봐서 느슨하게 함)
+const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 타겟팅됨 (순수 실측
+                              // 거리만 보면 스케일 오차 때문에 절대 안 가까워지는 오브젝트가 생길
+                              // 수 있어서, "바라보고 있는지"를 같이 봐서 느슨하게 함)
 const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
-const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지해야 실제로 고정됨(스치듯 지나가는 것 방지)
-const LOCK_FORWARD_OFFSET_M = 1.0; // lock되면 카메라 앞 이 거리에 고정(너무 가까워 커 보이지 않게)
+const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지해야 실제로 타겟팅됨(스치듯 지나가는 것 방지)
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
+
+const TARGETED_ICE_SCALE = 1.12; // 타겟팅되면 얼음이 이만큼 커짐(위치는 그대로, 제자리에서 강조만)
+const GRABBED_ICE_SCALE = 1.3; // 잡으면 타겟팅 상태보다 한 단계 더 커져서 "쥐었다"는 게 구분됨
 
 let iceItems = []; // { el, iceEl, mascotEl, worldPos, grabbed, removed }
 let lockedItem = null;
@@ -130,6 +133,36 @@ function fitLoadedModel(el, targetSizeM) {
     mesh.scale.multiplyScalar(scale);
     mesh.position.sub(center.multiplyScalar(scale));
   });
+}
+
+// 타겟팅 표시: gltf-model(iceEl)은 material 컴포넌트를 안 써서 색을 바꿀 수 없으므로, 그림/텍스처
+// 없이 기본 도형만으로 얼음 주위를 도는 파티클 + 은은한 발광 구체를 만들어 "지금 이 얼음이
+// 타겟됨"을 표시한다. 평소엔 숨겨뒀다가 타겟팅되는 순간 visible: true로 켠다.
+const TARGET_FX_PARTICLE_COUNT = 4;
+const TARGET_FX_ORBIT_RADIUS_M = 0.32;
+const TARGET_FX_COLOR = '#7ee8ff';
+
+function createTargetFx() {
+  const fx = document.createElement('a-entity');
+  fx.setAttribute('visible', false);
+  fx.setAttribute('animation__spin', 'property: rotation; to: 0 360 0; loop: true; dur: 2200; easing: linear');
+
+  const halo = document.createElement('a-entity');
+  halo.setAttribute('geometry', 'primitive: sphere; radius: 0.28; segmentsWidth: 12; segmentsHeight: 8');
+  halo.setAttribute('material', `color: ${TARGET_FX_COLOR}; shader: flat; opacity: 0.16; transparent: true; side: double`);
+  halo.setAttribute('animation__pulse', 'property: scale; from: 0.9 0.9 0.9; to: 1.15 1.15 1.15; dir: alternate; loop: true; dur: 900; easing: easeInOutSine');
+  fx.appendChild(halo);
+
+  for (let p = 0; p < TARGET_FX_PARTICLE_COUNT; p++) {
+    const angle = (p / TARGET_FX_PARTICLE_COUNT) * Math.PI * 2;
+    const dot = document.createElement('a-entity');
+    dot.setAttribute('geometry', 'primitive: sphere; radius: 0.025; segmentsWidth: 8; segmentsHeight: 6');
+    dot.setAttribute('material', `color: ${TARGET_FX_COLOR}; shader: flat; opacity: 0.9; transparent: true`);
+    dot.setAttribute('position', `${Math.cos(angle) * TARGET_FX_ORBIT_RADIUS_M} 0 ${Math.sin(angle) * TARGET_FX_ORBIT_RADIUS_M}`);
+    fx.appendChild(dot);
+  }
+
+  return fx;
 }
 
 function spawnIceItems() {
@@ -165,10 +198,13 @@ function spawnIceItems() {
     mascotEl.setAttribute('visible', false); // 깨지기 전까지는 숨김
     wrapper.appendChild(mascotEl);
 
+    const targetFx = createTargetFx();
+    wrapper.appendChild(targetFx);
+
     trashRoot.appendChild(wrapper);
 
     iceItems.push({
-      el: wrapper, iceEl, mascotEl, worldPos, grabbed: false, removed: false,
+      el: wrapper, iceEl, mascotEl, targetFx, worldPos, grabbed: false, removed: false,
     });
   }
   updateTrashCountText();
@@ -200,53 +236,47 @@ function getCameraPose() {
   }
 }
 
+// 예전에는 타겟팅(lock)되면 얼음을 카메라 정면 고정 거리로 "순간이동"시켰는데, 사용자 요청으로
+// 그 방식은 없앴다. 이제 얼음은 스폰된 실제 위치에 계속 그대로 있고, 타겟팅되면(onLockStart)
+// 그 자리에서 파티클 이펙트(targetFx)가 뜨고 살짝 커지는(TARGETED_ICE_SCALE) 것으로만 표시한다.
+// 그래서 이미 타겟팅된 뒤에는 매 프레임 할 일이 없어 바로 리턴한다.
 function updateLock() {
+  if (lockedItem) return;
+
   const pose = getCameraPose();
   if (!pose) return;
   const { camPos, forward } = pose;
 
-  if (!lockedItem) {
-    // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
-    const candidate = iceItems.find((t) => {
-      if (t.removed || dist(camPos, t.worldPos) >= LOCK_DISTANCE_M) return false;
-      const toItem = new AFRAME.THREE.Vector3(
-        t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
-      ).normalize();
-      return toItem.dot(forward) >= LOCK_GAZE_DOT_THRESHOLD;
-    });
+  // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
+  const candidate = iceItems.find((t) => {
+    if (t.removed || dist(camPos, t.worldPos) >= LOCK_DISTANCE_M) return false;
+    const toItem = new AFRAME.THREE.Vector3(
+      t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
+    ).normalize();
+    return toItem.dot(forward) >= LOCK_GAZE_DOT_THRESHOLD;
+  });
 
-    // 조건을 만족하는 순간 바로 lock하지 않고, LOCK_DWELL_MS만큼 그 얼음을 계속 바라보고
-    // 있어야 확정한다 — 스쳐 지나가듯 잠깐 조건을 만족한 것만으로 고정되는 걸 막기 위함.
-    if (candidate !== lockCandidate) {
-      lockCandidate = candidate || null;
-      lockCandidateStartedAt = candidate ? performance.now() : null;
-      return;
-    }
-    if (!candidate) return;
-    if (performance.now() - lockCandidateStartedAt < LOCK_DWELL_MS) return;
-
-    lockedItem = candidate;
-    lockedItem.grabbed = false;
-    lockCandidate = null;
-    lockCandidateStartedAt = null;
-    grabDwellStartedAt = null;
-    shakeHistory = [];
-    trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
-    if (DEBUG) debugState.locked = true;
-    onLockStart();
+  // 조건을 만족하는 순간 바로 타겟팅하지 않고, LOCK_DWELL_MS만큼 그 얼음을 계속 바라보고
+  // 있어야 확정한다 — 스쳐 지나가듯 잠깐 조건을 만족한 것만으로 타겟팅되는 걸 막기 위함.
+  if (candidate !== lockCandidate) {
+    lockCandidate = candidate || null;
+    lockCandidateStartedAt = candidate ? performance.now() : null;
     return;
   }
+  if (!candidate) return;
+  if (performance.now() - lockCandidateStartedAt < LOCK_DWELL_MS) return;
 
-  // 멀어져도 락은 안 풀린다 — 깨기 전까지는 계속 눈앞에 고정.
-  // (한때 이 재배치를 A-Frame 씬의 tick 이벤트로 옮겨봤으나 오히려 더 어긋났다 — XR8이 a-camera의
-  // object3D를 갱신하는 시점과 A-Frame의 범용 tick 이벤트가 발화하는 시점이 정확히 맞물리지
-  // 않아서(한 프레임 어긋난 포즈를 읽게 됨) 매 프레임 밀리는 문제가 생긴 것으로 보임. XR8 카메라
-  // 파이프라인의 onUpdate 안에서 읽는 게 렌더링에 실제로 쓰인 포즈와 항상 정확히 일치한다.)
-  lockedItem.el.object3D.position.set(
-    camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
-    camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
-    camPos.z + forward.z * LOCK_FORWARD_OFFSET_M,
-  );
+  lockedItem = candidate;
+  lockedItem.grabbed = false;
+  lockCandidate = null;
+  lockCandidateStartedAt = null;
+  grabDwellStartedAt = null;
+  shakeHistory = [];
+  lockedItem.targetFx.setAttribute('visible', true);
+  lockedItem.iceEl.setAttribute('scale', `${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE}`);
+  trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
+  if (DEBUG) debugState.locked = true;
+  onLockStart();
 }
 
 function updateTrashCountText() {
@@ -262,8 +292,10 @@ const distanceTrackerModule = {
 };
 
 // --- 잡기(grab) 판정 ---
-// lock된 오브젝트는 항상 카메라 정면 고정 거리에 위치하므로, 화면 어디에 있는지 매번 계산할
-// 필요 없이 손 랜드마크의 정규화 좌표(0~1)가 화면 중앙 근처(잡기 존)에 있는지만 보면 된다.
+// 얼음은 이제 실제 스폰 위치에 그대로 있고 화면 정면으로 순간이동하지 않으므로, 잡으려면 타겟팅된
+// 얼음이 보이는 방향으로 카메라를 든 채 손을 화면 중앙(잡기 존)으로 뻗어야 한다 — 실제로 눈앞의
+// 얼음을 향해 손을 뻗는 느낌에 더 가까워짐. 판정 자체는 손 랜드마크의 정규화 좌표(0~1)가 화면
+// 중앙 근처에 있는지만 본다(얼음과의 화면상 정확한 겹침까지는 계산하지 않는 단순화).
 const GRAB_ZONE_MIN = 0.35;
 const GRAB_ZONE_MAX = 0.65;
 const GRAB_DWELL_MS = 400; // 이 시간만큼 잡기 존 안에 머물러야 "잡기"로 인정(실수 방지)
@@ -271,17 +303,19 @@ const GRAB_DWELL_MS = 400; // 이 시간만큼 잡기 존 안에 머물러야 "�
 let grabDwellStartedAt = null;
 
 // gltf-model은 A-Frame의 material 컴포넌트로 색을 바꿀 수 없어서(모델 자체 재질을 쓰므로),
-// 잡았을 때 피드백은 스케일 변화로만 표현한다.
+// 잡았을 때 피드백은 스케일 변화로만 표현한다. 타겟팅 상태(TARGETED_ICE_SCALE)보다 한 단계 더
+// 커져서(GRABBED_ICE_SCALE) "쥐었다"는 게 구분되고, 놓으면 타겟팅 상태 크기로 되돌아간다(0으로
+// 안 돌아가는 이유: 놓아도 여전히 타겟팅된 상태라 완전히 안 커진 크기로 돌아가면 어색함).
 function onGrab(item) {
   item.grabbed = true;
-  item.iceEl.setAttribute('scale', '1.15 1.15 1.15');
+  item.iceEl.setAttribute('scale', `${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE}`);
   trashHintEl.textContent = '손을 흔들어서 얼음을 깨보세요!';
   if (DEBUG) debugLog('grab: item grabbed');
 }
 
 function onRelease(item) {
   item.grabbed = false;
-  item.iceEl.setAttribute('scale', '1 1 1');
+  item.iceEl.setAttribute('scale', `${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE}`);
   shakeHistory = [];
   trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
   if (DEBUG) debugLog('grab: released (moved out of zone)');
