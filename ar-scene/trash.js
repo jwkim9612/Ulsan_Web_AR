@@ -225,20 +225,14 @@ function updateLock() {
     trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
     if (DEBUG) debugState.locked = true;
     onLockStart();
+    return;
   }
-}
 
-// lock된 오브젝트를 카메라 정면에 붙이는 재배치는 XR8 카메라 파이프라인(onUpdate)이 아니라
-// A-Frame 씬의 tick 이벤트로 구동한다 — lock 중에는 손 인식용 CameraPixelArray/MediaPipe
-// 처리(onLockStart 참고)가 같은 카메라 파이프라인에 추가로 붙어서 그 onUpdate 호출 빈도가
-// 실제 렌더 프레임보다 떨어질 수 있는데, tick은 렌더되는 매 프레임마다 그 부하와 무관하게
-// 호출되므로 빠르게 움직여도 재배치가 뒤처지지 않는다.
-function followCameraIfLocked() {
-  if (!lockedItem) return;
-  const pose = getCameraPose();
-  if (!pose) return;
-  const { camPos, forward } = pose;
   // 멀어져도 락은 안 풀린다 — 깨기 전까지는 계속 눈앞에 고정.
+  // (한때 이 재배치를 A-Frame 씬의 tick 이벤트로 옮겨봤으나 오히려 더 어긋났다 — XR8이 a-camera의
+  // object3D를 갱신하는 시점과 A-Frame의 범용 tick 이벤트가 발화하는 시점이 정확히 맞물리지
+  // 않아서(한 프레임 어긋난 포즈를 읽게 됨) 매 프레임 밀리는 문제가 생긴 것으로 보임. XR8 카메라
+  // 파이프라인의 onUpdate 안에서 읽는 게 렌더링에 실제로 쓰인 포즈와 항상 정확히 일치한다.)
   lockedItem.el.object3D.position.set(
     camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
     camPos.y + forward.y * LOCK_FORWARD_OFFSET_M,
@@ -583,7 +577,6 @@ const onxrloaded = () => {
   XR8.XrController.configure({ scale: 'absolute' }); // 실측(미터) 스케일 요청
   XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
   XR8.addCameraPipelineModule(distanceTrackerModule);
-  cameraEl.sceneEl.addEventListener('tick', followCameraIfLocked);
 
   trashHintEl.textContent = '천천히 주변을 비춰서 스캔해주세요...';
   warmupHands(); // 스캔 대기 시간에 묻혀서 사용자는 로딩 렉을 못 느끼게
