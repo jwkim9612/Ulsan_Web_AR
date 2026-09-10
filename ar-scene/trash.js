@@ -176,19 +176,25 @@ function dist(a, b) {
 // 오브젝트가 화면 중앙이 아니라 한쪽으로 쏠려 보이거나(왼쪽/오른쪽 고정) 사용자가 계속
 // 움직이는 동안 그 오차가 누적돼 점점 화면 밖으로 밀려나는 것처럼 보이는 원인이었다.
 // a-camera 자체에서 읽으면 렌더링에 쓰인 포즈와 항상 정확히 일치한다.
-function updateLock() {
-  const camPos = new AFRAME.THREE.Vector3();
-  const camQuat = new AFRAME.THREE.Quaternion();
-  let forward;
+function getCameraPose() {
   try {
+    const camPos = new AFRAME.THREE.Vector3();
+    const camQuat = new AFRAME.THREE.Quaternion();
     cameraEl.object3D.getWorldPosition(camPos);
     cameraEl.object3D.getWorldQuaternion(camQuat);
-    forward = new AFRAME.THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
+    const forward = new AFRAME.THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
+    return { camPos, forward };
   } catch (e) {
     console.error('[ice] 카메라 위치/방향 계산 실패', e);
     if (DEBUG) debugLog(`camera pose failed: ${(e && e.message) || e}`);
-    return;
+    return null;
   }
+}
+
+function updateLock() {
+  const pose = getCameraPose();
+  if (!pose) return;
+  const { camPos, forward } = pose;
 
   if (!lockedItem) {
     // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
@@ -219,9 +225,19 @@ function updateLock() {
     trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
     if (DEBUG) debugState.locked = true;
     onLockStart();
-    return;
   }
+}
 
+// lock된 오브젝트를 카메라 정면에 붙이는 재배치는 XR8 카메라 파이프라인(onUpdate)이 아니라
+// A-Frame 씬의 tick 이벤트로 구동한다 — lock 중에는 손 인식용 CameraPixelArray/MediaPipe
+// 처리(onLockStart 참고)가 같은 카메라 파이프라인에 추가로 붙어서 그 onUpdate 호출 빈도가
+// 실제 렌더 프레임보다 떨어질 수 있는데, tick은 렌더되는 매 프레임마다 그 부하와 무관하게
+// 호출되므로 빠르게 움직여도 재배치가 뒤처지지 않는다.
+function followCameraIfLocked() {
+  if (!lockedItem) return;
+  const pose = getCameraPose();
+  if (!pose) return;
+  const { camPos, forward } = pose;
   // 멀어져도 락은 안 풀린다 — 깨기 전까지는 계속 눈앞에 고정.
   lockedItem.el.object3D.position.set(
     camPos.x + forward.x * LOCK_FORWARD_OFFSET_M,
@@ -567,6 +583,7 @@ const onxrloaded = () => {
   XR8.XrController.configure({ scale: 'absolute' }); // 실측(미터) 스케일 요청
   XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
   XR8.addCameraPipelineModule(distanceTrackerModule);
+  cameraEl.sceneEl.addEventListener('tick', followCameraIfLocked);
 
   trashHintEl.textContent = '천천히 주변을 비춰서 스캔해주세요...';
   warmupHands(); // 스캔 대기 시간에 묻혀서 사용자는 로딩 렉을 못 느끼게
