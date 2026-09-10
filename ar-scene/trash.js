@@ -133,6 +133,11 @@ function fitLoadedModel(el, targetSizeM) {
 }
 
 function spawnIceItems() {
+  // 스폰 시점의 실제 카메라 위치를 원점으로 삼는다(스캔 대기 없이 바로 부르므로 "지금 서 있는
+  // 자리" 기준 360도 배치가 됨). 아직 트래킹 포즈를 못 읽은 극초반이면 (0,0,0)으로 대체.
+  const pose = getCameraPose();
+  const origin = pose ? pose.camPos : { x: 0, y: 0, z: 0 };
+
   const sector = (Math.PI * 2) / SPAWN_COUNT;
   for (let i = 0; i < SPAWN_COUNT; i++) {
     const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
@@ -141,9 +146,9 @@ function spawnIceItems() {
     const theta = sector * i + Math.random() * sector;
     const phi = Math.acos((Math.random() * 2) - 1);
     const worldPos = {
-      x: radius * Math.sin(phi) * Math.cos(theta),
-      y: SPAWN_HEIGHT_OFFSET_M + radius * Math.sin(phi) * Math.sin(theta) * 0.4, // 세로 범위는 좀 좁게
-      z: radius * Math.cos(phi),
+      x: origin.x + radius * Math.sin(phi) * Math.cos(theta),
+      y: origin.y + SPAWN_HEIGHT_OFFSET_M + radius * Math.sin(phi) * Math.sin(theta) * 0.4, // 세로 범위는 좀 좁게
+      z: origin.z + radius * Math.cos(phi),
     };
 
     const wrapper = document.createElement('a-entity');
@@ -550,8 +555,8 @@ function onLockStart() {
 }
 
 // MediaPipe Hands는 wasm/모델 파일을 첫 send() 시점에야 지연 로딩한다. 이걸 락 거는 순간까지
-// 미뤄두면 사용자가 처음 손을 뻗으려는 바로 그 순간 로딩 렉을 그대로 겪게 되므로, 스캔 대기
-// 시간(SCALE_SETTLE_MS) 동안 더미 프레임을 한 번 보내 미리 로딩해둔다.
+// 미뤄두면 사용자가 처음 손을 뻗으려는 바로 그 순간 로딩 렉을 그대로 겪게 되므로, 씬 시작
+// 시점에 더미 프레임을 한 번 보내 미리 로딩해둔다.
 function warmupHands() {
   if (sendInFlight) return;
   const warmupCanvas = document.createElement('canvas');
@@ -586,19 +591,16 @@ function onLockEnd() {
 }
 
 // --- 초기화 ---
-// 단안 카메라 기반 SLAM은 트래킹 시작 직후 몇 초간 실측 스케일(m 단위) 추정이 아직 안정되지
-// 않은 상태라, 이 시점에 바로 오브젝트를 배치하면 스케일이 재추정될 때마다 위치가 흔들려서
-// "다가가면 오히려 멀어지는" 것처럼 보인다. 잠깐 스캔할 시간을 준 다음 배치한다.
-const SCALE_SETTLE_MS = 3000;
-
+// 참고: 단안 카메라 기반 SLAM은 트래킹 시작 직후 몇 초간 실측 스케일(m 단위) 추정이 아직
+// 안정되지 않은 상태라, 스캔 대기 없이 바로 배치하면 스케일이 재추정될 때마다 위치가 흔들려서
+// "다가가면 오히려 멀어지는" 것처럼 보일 수 있다(사용자 요청으로 스캔 대기 단계를 제거함).
 const onxrloaded = () => {
   XR8.XrController.configure({ scale: 'absolute' }); // 실측(미터) 스케일 요청
   XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
   XR8.addCameraPipelineModule(distanceTrackerModule);
 
-  trashHintEl.textContent = '천천히 주변을 비춰서 스캔해주세요...';
-  warmupHands(); // 스캔 대기 시간에 묻혀서 사용자는 로딩 렉을 못 느끼게
-  setTimeout(spawnIceItems, SCALE_SETTLE_MS);
+  warmupHands();
+  spawnIceItems();
 };
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
