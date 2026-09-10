@@ -86,7 +86,8 @@ resizeHandCanvas();
 window.addEventListener('resize', resizeHandCanvas);
 
 // --- 오브젝트 배치 및 거리/응시 판정 ---
-const RESCUE_COUNT = 3;
+const RESCUE_COUNT = 3; // 이만큼 깨면 완료(스폰 개수와는 별개)
+const SPAWN_COUNT = 5; // 실제로 주변에 흩뿌리는 얼음 개수 — 완료 조건보다 여유 있게 둬서 못 찾은 몇 개는 못 깨도 끝날 수 있게
 const SPAWN_MIN_M = 1.2;
 const SPAWN_MAX_M = 3.0; // 카메라 시작 위치(원점) 기준 구면좌표, 실측 미터. 스케일 추정 오차가
                           // 거리에 비례해서 커지므로 너무 멀리 두면 "가까워져도 거리가 안 줄어드는"
@@ -132,9 +133,12 @@ function fitLoadedModel(el, targetSizeM) {
 }
 
 function spawnIceItems() {
-  for (let i = 0; i < RESCUE_COUNT; i++) {
+  const sector = (Math.PI * 2) / SPAWN_COUNT;
+  for (let i = 0; i < SPAWN_COUNT; i++) {
     const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
-    const theta = Math.random() * Math.PI * 2;
+    // 완전 랜덤 각도 대신 방위각을 SPAWN_COUNT개 구간으로 나눠 그 안에서만 무작위로 잡는다 —
+    // 순수 랜덤이면 우연히 여러 개가 한쪽에 몰릴 수 있는데, 이렇게 하면 사용자 주변에 고르게 흩어짐.
+    const theta = sector * i + Math.random() * sector;
     const phi = Math.acos((Math.random() * 2) - 1);
     const worldPos = {
       x: radius * Math.sin(phi) * Math.cos(theta),
@@ -283,7 +287,7 @@ function onRelease(item) {
 // 그 안에서 방향이 여러 번 바뀌면 "흔들기"로 판정. 쓰다듬기보다 더 크고 빠른 움직임을
 // 기대하는 동작이라 허용 진폭(SHAKE_MAX_SPREAD)과 최소 이동량(SHAKE_MIN_MOVE)을 더 크게 잡음.
 const SHAKE_HISTORY_MS = 900;
-const SHAKE_MIN_REVERSALS = 3;
+const SHAKE_MIN_REVERSALS = 2;
 const SHAKE_MIN_MOVE = 0.02;
 const SHAKE_MAX_SPREAD = 0.5;
 const BREAK_COOLDOWN_MS = 1000;
@@ -344,6 +348,19 @@ function spawnShards(wrapper) {
   }
 }
 
+// 목표(RESCUE_COUNT)를 다 채우면, 스폰됐지만 아직 못 깬 나머지 얼음은 그냥 없앤다.
+function despawnRemainingIce() {
+  for (const other of iceItems) {
+    if (other.removed) continue;
+    other.removed = true;
+    other.el.setAttribute(
+      'animation__despawn',
+      `property: scale; to: 0.001 0.001 0.001; dur: ${BREAK_EFFECT_MS}; easing: easeInQuad`,
+    );
+    setTimeout(() => other.el.remove(), BREAK_EFFECT_MS + 50);
+  }
+}
+
 function breakLockedItem() {
   const item = lockedItem;
   if (!item) return;
@@ -375,6 +392,7 @@ function breakLockedItem() {
   updateTrashCountText();
 
   if (rescuedCount === RESCUE_COUNT) {
+    despawnRemainingIce();
     setTimeout(() => {
       trashHintEl.textContent = '';
       trashFinishedEl.style.display = 'block';
