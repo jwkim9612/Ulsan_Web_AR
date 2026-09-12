@@ -18,6 +18,7 @@ const trashRoot = document.getElementById('trash-root');
 const cameraEl = document.querySelector('a-camera');
 const trashCountText = document.getElementById('trash-count-text');
 const trashHintEl = document.getElementById('trash-hint');
+const trashFinishedEl = document.getElementById('trash-finished');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 const handCanvas = document.getElementById('hand-canvas');
@@ -462,6 +463,9 @@ function breakLockedItem() {
     trashHintEl.textContent = '';
     statusPillEl.textContent = '미션 완료';
     SFX.playThenLoop('ice_success', 'complete_bgm_loop');
+    setTimeout(() => {
+      trashFinishedEl.style.display = 'block';
+    }, BREAK_EFFECT_MS);
     setTimeout(() => {
       completeOverlayEl.style.display = 'block';
     }, BREAK_EFFECT_MS + FINISH_DELAY_MS);

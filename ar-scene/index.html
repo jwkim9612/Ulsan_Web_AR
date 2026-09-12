@@ -118,6 +118,13 @@
       100% { transform: scale(1);    box-shadow: 0 0 0 rgba(255,255,255,0); }
     }
 
+    /* 조각을 다 모으면 완성된 그림을 잠깐 보여줌(완료 화면 뜨기 전 즉시 피드백) */
+    #puzzle-finished {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 15; display: none;
+      max-width: 70vw; max-height: 70vh;
+    }
+
     /* 미션 완료 화면 — camera-intro.html 계열과 같은 톤의 축하 화면 */
     #complete-overlay {
       position: fixed; inset: 0; z-index: 50; display: none;
@@ -252,6 +259,7 @@
     <div class="puzzle-slot" id="puzzle-slot-2"></div>
     <div class="puzzle-slot" id="puzzle-slot-3"></div>
   </div>
+  <img id="puzzle-finished" src="" alt="완성" />
   <div id="puzzle-hint"></div>
 
   <div id="bottom-panel">
