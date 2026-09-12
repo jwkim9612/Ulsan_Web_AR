@@ -21,15 +21,28 @@
 
   function playThenLoop(name, loopName) {
     const audio = play(name);
+    // loop용 오디오를 'ended' 시점에 새로 만들면 그때부터 다운로드가 시작돼서 재생이 늦거나
+    // 조용히 실패할 수 있음 — 성공음이 재생되는 동안 미리 만들어서 로드해둔다.
+    const loop = new Audio(src(loopName));
+    loop.loop = true;
+    loop.preload = 'auto';
     audio.addEventListener('ended', () => {
-      const loop = new Audio(src(loopName));
-      loop.loop = true;
-      loop.play().catch(() => {});
+      loop.currentTime = 0;
+      loop.play().catch((err) => console.error('[SFX] loop 재생 실패', err));
     });
     return audio;
   }
 
-  window.SFX = { play, playThenLoop };
+  // 버튼 클릭과 동시에 location.href를 바꾸면 오디오가 실제로 소리를 내기도 전에 페이지가
+  // 언로드돼서 클릭음이 안 들린다 — 버튼의 onclick에서 location.href를 직접 쓰는 대신 이
+  // 함수로 살짝(기본 180ms) 지연시켜서 클릭음이 들릴 시간을 확보한다.
+  function navigate(url, delayMs = 180) {
+    setTimeout(() => {
+      location.href = url;
+    }, delayMs);
+  }
+
+  window.SFX = { play, playThenLoop, navigate };
 
   document.addEventListener('click', (e) => {
     if (e.target.closest('button')) play('button_click');

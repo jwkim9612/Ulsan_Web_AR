@@ -78,7 +78,7 @@ if (DEBUG) {
 }
 
 backBtn.addEventListener('click', () => {
-  location.href = 'scan.html';
+  SFX.navigate('scan.html');
 });
 
 function resizeHandCanvas() {

@@ -20,7 +20,7 @@ if (new URLSearchParams(location.search).get('preview') === 'complete') {
 }
 
 backBtn.addEventListener('click', () => {
-  location.href = 'scan.html';
+  SFX.navigate('scan.html');
 });
 
 const collectedPieces = new Set();
