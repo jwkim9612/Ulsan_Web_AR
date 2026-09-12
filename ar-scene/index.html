@@ -123,6 +123,13 @@
       z-index: 15; display: none;
       max-width: 70vw; max-height: 70vh;
     }
+
+    #puzzle-hint {
+      position: fixed; bottom: 115px; left: 0; right: 0; z-index: 20;
+      display: flex; justify-content: center;
+      color: #fff; font: 16px sans-serif; text-shadow: 0 0 6px #000;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -156,6 +163,7 @@
     <div class="puzzle-slot" id="puzzle-slot-3"></div>
   </div>
   <img id="puzzle-finished" src="" alt="완성" />
+  <div id="puzzle-hint"></div>
 
   <div id="bottom-panel">
     <h2>화면 속 미션을 진행해 주세요</h2>

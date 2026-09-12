@@ -11,6 +11,8 @@ const FINISHED_IMAGE = '../assets/images/1.png';
 const backBtn = document.getElementById('back-btn');
 const puzzleHud = document.getElementById('puzzle-hud');
 const puzzleFinishedEl = document.getElementById('puzzle-finished');
+const puzzleHintEl = document.getElementById('puzzle-hint');
+const statusPillEl = document.getElementById('status-pill');
 
 // 다 맞춘 순간에 src를 지정하면 디코딩 지연으로 살짝 깜빡여 보임 —
 // 미리 받아서 decode()까지 끝내둔 다음, 필요할 때는 display만 바꾼다.
@@ -32,12 +34,16 @@ function collectPiece(targetIndex) {
 
   if (collectedPieces.size === PIECE_NAMES.length) {
     showPuzzleFinished();
+  } else {
+    puzzleHintEl.textContent = '다음 조각을 찾아 다가가 보세요';
   }
 }
 
 function showPuzzleFinished() {
   puzzleHud.style.display = 'none';
   puzzleFinishedEl.style.display = 'block';
+  puzzleHintEl.textContent = '';
+  statusPillEl.textContent = '미션 완료';
 }
 
 PIECE_NAMES.forEach((name, targetIndex) => {
@@ -94,6 +100,8 @@ function spawnPuzzleTargets() {
       el, worldPos, index, collected: false, gazeStartedAt: null,
     });
   });
+
+  puzzleHintEl.textContent = '조각이 있는 곳으로 다가가 바라보세요!';
 }
 
 function dist(a, b) {

@@ -19,6 +19,7 @@ const cameraEl = document.querySelector('a-camera');
 const trashCountText = document.getElementById('trash-count-text');
 const trashHintEl = document.getElementById('trash-hint');
 const trashFinishedEl = document.getElementById('trash-finished');
+const statusPillEl = document.getElementById('status-pill');
 const handCanvas = document.getElementById('hand-canvas');
 const handCtx = handCanvas.getContext('2d');
 
@@ -455,6 +456,7 @@ function breakLockedItem() {
     setTimeout(() => {
       trashHintEl.textContent = '';
       trashFinishedEl.style.display = 'block';
+      statusPillEl.textContent = '미션 완료';
     }, BREAK_EFFECT_MS);
   } else {
     trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';
