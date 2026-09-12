@@ -14,7 +14,6 @@
 // 퍼즐 모드(index.html)도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리돼 있다.
 
 const backBtn = document.getElementById('back-btn');
-const modePuzzleBtn = document.getElementById('mode-puzzle');
 const trashRoot = document.getElementById('trash-root');
 const cameraEl = document.querySelector('a-camera');
 const trashCountText = document.getElementById('trash-count-text');
@@ -73,10 +72,7 @@ if (DEBUG) {
 }
 
 backBtn.addEventListener('click', () => {
-  location.href = '../index.html';
-});
-modePuzzleBtn.addEventListener('click', () => {
-  location.href = 'index.html';
+  location.href = 'scan.html';
 });
 
 function resizeHandCanvas() {

@@ -9,7 +9,6 @@ const PIECE_IMAGES = PIECE_NAMES.map((name) => `../assets/images/${name}.png`);
 const FINISHED_IMAGE = '../assets/images/1.png';
 
 const backBtn = document.getElementById('back-btn');
-const modeTrashBtn = document.getElementById('mode-trash');
 const puzzleHud = document.getElementById('puzzle-hud');
 const puzzleFinishedEl = document.getElementById('puzzle-finished');
 
@@ -19,10 +18,7 @@ puzzleFinishedEl.src = FINISHED_IMAGE;
 puzzleFinishedEl.decode().catch(() => {});
 
 backBtn.addEventListener('click', () => {
-  location.href = '../index.html';
-});
-modeTrashBtn.addEventListener('click', () => {
-  location.href = 'trash.html';
+  location.href = 'scan.html';
 });
 
 const collectedPieces = new Set();

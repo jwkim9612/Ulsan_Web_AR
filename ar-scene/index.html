@@ -20,22 +20,82 @@
     /* xrextras 로딩 화면의 "Powered by 8th Wall" 워터마크 숨김 */
     .poweredby-img { display: none !important; }
 
+    /* 상단 카드(뒤로가기+로고/타이틀+현재 모드) + 상태 뱃지 — camera-intro.html/scan.html과
+       동일한 톤. 실제 폭/위치 계산이 필요해서 flex-column인 #top-chrome 안에 쌓는다. */
+    #top-chrome {
+      position: fixed; top: max(16px, env(safe-area-inset-top)); left: 50%;
+      transform: translateX(-50%); z-index: 30;
+      width: min(92vw, 480px);
+      display: flex; flex-direction: column; align-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+    #top-panel {
+      width: 100%;
+      background: #f7fcff;
+      border: 1px solid #deeef8;
+      border-radius: 22px;
+      padding: 12px 14px;
+      box-sizing: border-box;
+    }
+    #top-panel-row1 { position: relative; display: flex; align-items: center; justify-content: center; }
     #back-btn {
-      position: fixed; top: 16px; left: 16px; z-index: 30;
-      width: 44px; height: 44px; border: none; border-radius: 50%;
-      background: rgba(0,0,0,0.5); color: #fff; font: bold 20px sans-serif;
+      position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+      width: clamp(34px, 8.5vw, 40px); height: clamp(34px, 8.5vw, 40px);
+      border: none; padding: 0; background: transparent; cursor: pointer;
+      transition: filter 0.1s, transform 0.1s;
+    }
+    #back-btn img { width: 100%; height: 100%; display: block; }
+    #back-btn:active { filter: brightness(0.9); transform: translateY(-50%) scale(0.94); }
+
+    #header-title { display: flex; align-items: center; gap: 6px; }
+    #header-title img { width: clamp(16px, 4.2vw, 20px); height: auto; }
+    #header-title span { font-size: clamp(15px, 4vw, 18px); font-weight: 800; color: #0a2540; }
+
+    #mode-pill {
+      margin: 10px auto 0;
+      width: fit-content;
+      background: #087df0;
+      color: #fff;
+      font-weight: 800;
+      font-size: clamp(13px, 3.6vw, 15px);
+      padding: 8px 22px;
+      border-radius: 999px;
     }
 
-    #mode-panel {
-      position: fixed; top: 16px; left: 76px; right: 16px; z-index: 30;
-      display: flex; gap: 8px;
-      background: rgba(0,0,0,0.4); border-radius: 24px; padding: 6px;
+    #status-pill {
+      margin-top: clamp(12px, 3vh, 18px);
+      background: #ddf8f6;
+      color: #126c75;
+      font-weight: 800;
+      font-size: clamp(12.5px, 3.4vw, 14.5px);
+      padding: 9px 20px;
+      border-radius: 999px;
     }
-    #mode-panel button {
-      flex: 1; border: none; border-radius: 18px; padding: 12px 0;
-      font: bold 16px sans-serif; color: #fff; background: transparent;
+
+    /* 하단 안내 카드 — scan.html 하단 카드와 동일 톤 */
+    #bottom-panel {
+      position: fixed; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%;
+      transform: translateX(-50%); z-index: 30;
+      width: min(92vw, 480px);
+      background: #f7fcff;
+      border: 1px solid #deeef8;
+      border-radius: 22px;
+      padding: 18px 16px;
+      box-sizing: border-box;
+      text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
     }
-    #mode-panel button.active { background: #2ea5ff; }
+    #bottom-panel h2 {
+      margin: 0;
+      font-size: clamp(16px, 4.4vw, 19px);
+      font-weight: 800;
+      color: #0a2540;
+    }
+    #bottom-panel p {
+      margin: 6px 0 0;
+      font-size: clamp(12.5px, 3.4vw, 14px);
+      color: #4a7a9e;
+    }
 
     /* 퍼즐 모드: 화면 중앙 2x2 조각 그리드(못 모은 조각은 반투명) */
     #puzzle-hud {
@@ -73,11 +133,20 @@
     <a-entity id="puzzle-targets-root"></a-entity>
   </a-scene>
 
-  <button id="back-btn">←</button>
-
-  <div id="mode-panel">
-    <button id="mode-puzzle" class="active">퍼즐</button>
-    <button id="mode-trash">고래구조</button>
+  <div id="top-chrome">
+    <div id="top-panel">
+      <div id="top-panel-row1">
+        <button id="back-btn">
+          <img src="../assets/images/intro_back_btn.png" alt="뒤로가기" />
+        </button>
+        <div id="header-title">
+          <img src="../assets/images/intro_logo.png" alt="" />
+          <span>울산 AR</span>
+        </div>
+      </div>
+      <div id="mode-pill">퍼즐</div>
+    </div>
+    <div id="status-pill">미션 진행 중</div>
   </div>
 
   <div id="puzzle-hud">
@@ -87,6 +156,11 @@
     <div class="puzzle-slot" id="puzzle-slot-3"></div>
   </div>
   <img id="puzzle-finished" src="" alt="완성" />
+
+  <div id="bottom-panel">
+    <h2>화면 속 미션을 진행해 주세요</h2>
+    <p>주변을 살피며 천천히 움직여요</p>
+  </div>
 
   <script src="puzzle.js"></script>
 </body>
