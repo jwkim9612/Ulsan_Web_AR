@@ -123,12 +123,94 @@
       pointer-events: none;
     }
 
-    #trash-finished {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      z-index: 25; display: none;
-      font: bold 24px sans-serif; color: #fff; text-align: center;
-      background: rgba(0,0,0,0.5); padding: 16px 28px; border-radius: 12px;
+    /* 미션 완료 화면 — camera-intro.html 계열과 같은 톤의 축하 화면 */
+    #complete-overlay {
+      position: fixed; inset: 0; z-index: 50; display: none;
+      overflow-y: auto;
+      background: #e5f9f7; /* 배경 이미지 로드 전/여백에 보일 폴백색, 아래 요소들이 절대 비치지 않게 */
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
     }
+    #complete-bg {
+      position: absolute; inset: 0; z-index: -1;
+      background: url('../assets/images/complete_trash_bg.png') center center / cover no-repeat;
+    }
+    #complete-content {
+      min-height: 100%;
+      display: flex; flex-direction: column; align-items: center;
+      width: min(92vw, 480px);
+      margin: 0 auto;
+      padding: max(28px, env(safe-area-inset-top)) 0 max(28px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      text-align: center;
+    }
+    #complete-logo { width: clamp(28px, 7vw, 34px); height: auto; }
+
+    #complete-badge {
+      position: relative;
+      margin-top: clamp(14px, 3.5vh, 22px);
+      width: fit-content;
+    }
+    #complete-badge img { display: block; height: clamp(30px, 8vw, 38px); width: auto; }
+    #complete-badge span {
+      position: absolute; top: 0; bottom: 0; left: 26%; right: 8%;
+      display: flex; align-items: center;
+      font-size: clamp(12.5px, 3.4vw, 14.5px);
+      font-weight: 800;
+      color: #008e9b;
+      white-space: nowrap;
+    }
+
+    #complete-title {
+      margin: clamp(10px, 3vh, 16px) 0 0;
+      font-size: clamp(28px, 8vw, 38px);
+      font-weight: 800;
+      color: #008e9b;
+    }
+
+    #complete-whale {
+      width: clamp(190px, 56vw, 300px);
+      height: auto;
+      margin-top: clamp(10px, 3vh, 20px);
+    }
+
+    #complete-card {
+      width: 100%;
+      background: #fff;
+      border-radius: 22px;
+      padding: clamp(18px, 4vh, 26px) 20px;
+      box-sizing: border-box;
+      margin-top: clamp(14px, 3.5vh, 22px);
+      box-shadow: 0 6px 20px rgba(10, 60, 100, 0.08);
+    }
+    #complete-card h2 {
+      margin: 0;
+      font-size: clamp(18px, 4.8vw, 21px);
+      font-weight: 800;
+      color: #0a2540;
+    }
+    #complete-card p {
+      margin: 8px 0 0;
+      font-size: clamp(13px, 3.4vw, 15px);
+      color: #4a7a9e;
+    }
+
+    #complete-btn {
+      position: relative;
+      width: 100%; max-width: 400px;
+      border: none; padding: 0; cursor: pointer;
+      background: transparent;
+      -webkit-appearance: none; appearance: none;
+      margin-top: clamp(18px, 4.5vh, 26px);
+      transition: filter 0.1s, transform 0.1s;
+    }
+    #complete-btn img { width: 100%; height: auto; display: block; }
+    #complete-btn span {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 800;
+      font-size: clamp(15px, 4.2vw, 18px);
+    }
+    #complete-btn:active { filter: brightness(0.92); transform: scale(0.97); }
   </style>
 </head>
 <body>
@@ -159,11 +241,31 @@
 
   <div id="trash-count"><span id="trash-count-text">0/3</span></div>
   <div id="trash-hint"></div>
-  <div id="trash-finished">장생이를 모두 구했어요!</div>
 
   <div id="bottom-panel">
     <h2>화면 속 미션을 진행해 주세요</h2>
     <p>주변을 살피며 천천히 움직여요</p>
+  </div>
+
+  <div id="complete-overlay">
+    <div id="complete-bg"></div>
+    <div id="complete-content">
+      <img id="complete-logo" src="../assets/images/intro_logo.png" alt="" />
+      <div id="complete-badge">
+        <img src="../assets/images/complete_trash_badge.png" alt="" />
+        <span>고래 구조 · 미션 성공</span>
+      </div>
+      <h1 id="complete-title">고래 구조 성공!</h1>
+      <img id="complete-whale" src="../assets/images/complete_whale.png" alt="" />
+      <div id="complete-card">
+        <h2>정말 잘했어요!</h2>
+        <p>고래가 다시 자유로워졌어요. 고마워요!</p>
+      </div>
+      <button id="complete-btn" onclick="location.href='scan.html'">
+        <img src="../assets/images/complete_trash_btn.png" alt="" />
+        <span>카메라 화면으로 돌아가기</span>
+      </button>
+    </div>
   </div>
 
   <script src="trash.js"></script>

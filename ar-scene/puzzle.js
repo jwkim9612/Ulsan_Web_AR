@@ -6,18 +6,13 @@
 
 const PIECE_NAMES = ['p_1', 'p_2', 'p_3', 'p_4'];
 const PIECE_IMAGES = PIECE_NAMES.map((name) => `../assets/images/${name}.png`);
-const FINISHED_IMAGE = '../assets/images/1.png';
+const FINISH_DELAY_MS = 2000; // 마지막 조각을 모으고 이만큼 뒤에 완료 화면을 띄움
 
 const backBtn = document.getElementById('back-btn');
 const puzzleHud = document.getElementById('puzzle-hud');
-const puzzleFinishedEl = document.getElementById('puzzle-finished');
 const puzzleHintEl = document.getElementById('puzzle-hint');
 const statusPillEl = document.getElementById('status-pill');
-
-// 다 맞춘 순간에 src를 지정하면 디코딩 지연으로 살짝 깜빡여 보임 —
-// 미리 받아서 decode()까지 끝내둔 다음, 필요할 때는 display만 바꾼다.
-puzzleFinishedEl.src = FINISHED_IMAGE;
-puzzleFinishedEl.decode().catch(() => {});
+const completeOverlayEl = document.getElementById('complete-overlay');
 
 backBtn.addEventListener('click', () => {
   location.href = 'scan.html';
@@ -41,9 +36,12 @@ function collectPiece(targetIndex) {
 
 function showPuzzleFinished() {
   puzzleHud.style.display = 'none';
-  puzzleFinishedEl.style.display = 'block';
   puzzleHintEl.textContent = '';
   statusPillEl.textContent = '미션 완료';
+
+  setTimeout(() => {
+    completeOverlayEl.style.display = 'block';
+  }, FINISH_DELAY_MS);
 }
 
 PIECE_NAMES.forEach((name, targetIndex) => {

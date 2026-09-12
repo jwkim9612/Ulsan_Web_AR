@@ -18,8 +18,8 @@ const trashRoot = document.getElementById('trash-root');
 const cameraEl = document.querySelector('a-camera');
 const trashCountText = document.getElementById('trash-count-text');
 const trashHintEl = document.getElementById('trash-hint');
-const trashFinishedEl = document.getElementById('trash-finished');
 const statusPillEl = document.getElementById('status-pill');
+const completeOverlayEl = document.getElementById('complete-overlay');
 const handCanvas = document.getElementById('hand-canvas');
 const handCtx = handCanvas.getContext('2d');
 
@@ -382,6 +382,7 @@ function checkShake(x, y, now) {
 
 // --- 깨짐 이펙트 (placeholder: 그림 없이 도형 애니메이션으로 구현) ---
 const BREAK_EFFECT_MS = 800;
+const FINISH_DELAY_MS = 2000; // 마지막 얼음이 깨진 뒤 이만큼 더 지나서 완료 화면을 띄움
 const SHARD_COUNT = 7;
 
 function spawnShards(wrapper) {
@@ -453,11 +454,11 @@ function breakLockedItem() {
 
   if (rescuedCount === RESCUE_COUNT) {
     despawnRemainingIce();
+    trashHintEl.textContent = '';
+    statusPillEl.textContent = '미션 완료';
     setTimeout(() => {
-      trashHintEl.textContent = '';
-      trashFinishedEl.style.display = 'block';
-      statusPillEl.textContent = '미션 완료';
-    }, BREAK_EFFECT_MS);
+      completeOverlayEl.style.display = 'block';
+    }, BREAK_EFFECT_MS + FINISH_DELAY_MS);
   } else {
     trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';
   }
