@@ -14,6 +14,11 @@ const puzzleHintEl = document.getElementById('puzzle-hint');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 
+// 미리보기용: index.html?preview=complete 로 접속하면 게임 진행 없이 완료 화면부터 바로 보임.
+if (new URLSearchParams(location.search).get('preview') === 'complete') {
+  completeOverlayEl.style.display = 'block';
+}
+
 backBtn.addEventListener('click', () => {
   location.href = 'scan.html';
 });

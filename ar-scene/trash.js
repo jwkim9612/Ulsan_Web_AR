@@ -21,6 +21,11 @@ const trashHintEl = document.getElementById('trash-hint');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 const handCanvas = document.getElementById('hand-canvas');
+
+// 미리보기용: trash.html?preview=complete 로 접속하면 게임 진행 없이 완료 화면부터 바로 보임.
+if (new URLSearchParams(location.search).get('preview') === 'complete') {
+  completeOverlayEl.style.display = 'block';
+}
 const handCtx = handCanvas.getContext('2d');
 
 // --- 안드로이드 크롬 손 인식 미동작 진단용 디버그 오버레이 (?debug=1) ---
