@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Ulsan_AR</title>
+  <title>Ulsan_AR - 모험 준비</title>
   <style>
     html, body {
       margin: 0; height: 100%; overflow: hidden;
@@ -29,22 +29,27 @@
       display: block;
     }
 
-    #enter-btn {
+    .icon-btn, #camera-btn {
       position: absolute;
-      left: 20px; top: 651px; width: 320px; height: 50px;
       border: none; padding: 0; background: transparent; cursor: pointer;
       transition: filter 0.1s, transform 0.1s;
     }
-    #enter-btn img { width: 100%; height: 100%; display: block; }
-    #enter-btn:active { filter: brightness(0.85); transform: scale(0.96); }
+    .icon-btn img, #camera-btn img { width: 100%; height: 100%; display: block; }
+    .icon-btn:active, #camera-btn:active { filter: brightness(0.85); transform: scale(0.96); }
+
+    #back-btn { left: 20px; top: 20px; width: 42px; height: 42px; }
+    #camera-btn { left: 20px; top: 637px; width: 320px; height: 50px; }
   </style>
 </head>
 <body ontouchstart="">
   <div id="stage-outer">
     <div id="stage">
-      <img id="bg" src="assets/images/welcome_bg.png" alt="울산 AR - 울산에서 만나는 신나는 고래 모험" />
-      <button id="enter-btn" onclick="location.href='camera-intro.html'">
-        <img src="assets/images/enter_btn.png" alt="모험 시작하기" />
+      <img id="bg" src="assets/images/camera_intro_bg.png" alt="모험 준비 - 카메라로 모험을 시작해요" />
+      <button id="back-btn" class="icon-btn" onclick="location.href='index.html'">
+        <img src="assets/images/back_btn.png" alt="뒤로가기" />
+      </button>
+      <button id="camera-btn" onclick="location.href='ar-scene/index.html'">
+        <img src="assets/images/camera_on_btn.png" alt="카메라 켜기" />
       </button>
     </div>
   </div>
