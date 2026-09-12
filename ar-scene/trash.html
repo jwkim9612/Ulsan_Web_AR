@@ -143,11 +143,18 @@
       box-sizing: border-box;
       text-align: center;
     }
-    #complete-logo { width: clamp(28px, 7vw, 34px); height: auto; }
+    #complete-logo { width: clamp(28px, 7vw, 34px); height: auto; flex: 0 0 auto; }
+
+    /* 뱃지~카드까지 한 덩어리를 로고와 버튼 사이 남는 공간에서 위아래로 가운데 정렬 */
+    #complete-hero {
+      flex: 1 1 auto;
+      width: 100%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center;
+    }
 
     #complete-badge {
       position: relative;
-      margin-top: clamp(14px, 3.5vh, 22px);
       width: fit-content;
     }
     #complete-badge img { display: block; height: clamp(30px, 8vw, 38px); width: auto; }
@@ -251,15 +258,17 @@
     <div id="complete-bg"></div>
     <div id="complete-content">
       <img id="complete-logo" src="../assets/images/intro_logo.png" alt="" />
-      <div id="complete-badge">
-        <img src="../assets/images/complete_trash_badge.png" alt="" />
-        <span>고래 구조 · 미션 성공</span>
-      </div>
-      <h1 id="complete-title">고래 구조 성공!</h1>
-      <img id="complete-whale" src="../assets/images/complete_whale.png" alt="" />
-      <div id="complete-card">
-        <h2>정말 잘했어요!</h2>
-        <p>고래가 다시 자유로워졌어요. 고마워요!</p>
+      <div id="complete-hero">
+        <div id="complete-badge">
+          <img src="../assets/images/complete_trash_badge.png" alt="" />
+          <span>고래 구조 · 미션 성공</span>
+        </div>
+        <h1 id="complete-title">고래 구조 성공!</h1>
+        <img id="complete-whale" src="../assets/images/complete_whale.png" alt="" />
+        <div id="complete-card">
+          <h2>정말 잘했어요!</h2>
+          <p>고래가 다시 자유로워졌어요. 고마워요!</p>
+        </div>
       </div>
       <button id="complete-btn" onclick="location.href='scan.html'">
         <img src="../assets/images/complete_trash_btn.png" alt="" />
