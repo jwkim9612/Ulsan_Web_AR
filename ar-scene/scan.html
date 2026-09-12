@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Ulsan_AR - QR 인식</title>
+
+  <!-- 이미지 트래킹 = MindAR(MIT, three.js 기반). "three"는 peer 의존성이라 import map으로 지정.
+       sRGBEncoding이 three@0.169+에서 제거돼서 mind-ar@1.2.5가 깨지므로 0.160.0으로 고정
+       (이 프로젝트에서 과거에 동일한 조합으로 검증됨). -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+
+    #mindar-container { position: fixed; inset: 0; }
+    #mindar-container video, #mindar-container canvas {
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+    }
+
+    #overlay {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center;
+      width: min(92vw, 480px);
+      margin: 0 auto;
+      padding: max(20px, env(safe-area-inset-top)) 0 max(24px, env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      pointer-events: none; /* 카드/버튼 등 실제 상호작용 요소에만 개별로 다시 켜줌 */
+    }
+
+    #top-panel {
+      width: 100%;
+      background: #f7fcff;
+      border: 1px solid #deeef8;
+      border-radius: 22px;
+      padding: 12px 14px;
+      box-sizing: border-box;
+      flex: 0 0 auto;
+    }
+    #top-panel-row1 { position: relative; display: flex; align-items: center; justify-content: center; }
+    #back-btn {
+      position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+      width: clamp(34px, 8.5vw, 40px); height: clamp(34px, 8.5vw, 40px);
+      border: none; padding: 0; background: transparent; cursor: pointer;
+      pointer-events: auto;
+      transition: filter 0.1s, transform 0.1s;
+    }
+    #back-btn img { width: 100%; height: 100%; display: block; }
+    #back-btn:active { filter: brightness(0.9); transform: translateY(-50%) scale(0.94); }
+
+    #header-title { display: flex; align-items: center; gap: 6px; }
+    #header-title img { width: clamp(16px, 4.2vw, 20px); height: auto; }
+    #header-title span { font-size: clamp(15px, 4vw, 18px); font-weight: 800; color: #0a2540; }
+
+    #mode-pill {
+      display: none; /* 마커 인식 전에는 숨김 — 인식되는 순간에만 표시 */
+      margin: 10px auto 0;
+      width: fit-content;
+      background: #087df0;
+      color: #fff;
+      font-weight: 800;
+      font-size: clamp(13px, 3.6vw, 15px);
+      padding: 8px 22px;
+      border-radius: 999px;
+    }
+
+    #status-pill {
+      margin-top: clamp(12px, 3vh, 18px);
+      flex: 0 0 auto;
+      background: #dff3ff;
+      color: #12304a;
+      font-weight: 800;
+      font-size: clamp(12.5px, 3.4vw, 14.5px);
+      padding: 9px 20px;
+      border-radius: 999px;
+      transition: background 0.2s, color 0.2s;
+    }
+    #status-pill.found { background: #ddf8f6; color: #126c75; }
+
+    #scan-area {
+      flex: 1 1 auto;
+      width: 100%;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 0;
+    }
+    #scan-guide {
+      width: min(62vw, 300px);
+      height: auto;
+    }
+
+    #bottom-panel {
+      width: 100%;
+      background: #f7fcff;
+      border: 1px solid #deeef8;
+      border-radius: 22px;
+      padding: 18px 16px;
+      box-sizing: border-box;
+      text-align: center;
+      flex: 0 0 auto;
+    }
+    #bottom-panel h2 {
+      margin: 0;
+      font-size: clamp(16px, 4.4vw, 19px);
+      font-weight: 800;
+      color: #0a2540;
+    }
+    #bottom-panel p {
+      margin: 6px 0 0;
+      font-size: clamp(12.5px, 3.4vw, 14px);
+      color: #4a7a9e;
+    }
+
+    #permission-msg {
+      position: fixed; inset: 0; z-index: 40; display: none;
+      align-items: center; justify-content: center; text-align: center;
+      color: #fff; font-size: 16px; line-height: 1.6;
+      background: rgba(0, 0, 0, 0.8); padding: 24px; box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+  <div id="mindar-container"></div>
+
+  <div id="overlay">
+    <div id="top-panel">
+      <div id="top-panel-row1">
+        <button id="back-btn" onclick="location.href='../camera-intro.html'">
+          <img src="../assets/images/intro_back_btn.png" alt="뒤로가기" />
+        </button>
+        <div id="header-title">
+          <img src="../assets/images/intro_logo.png" alt="" />
+          <span>울산 AR</span>
+        </div>
+      </div>
+      <div id="mode-pill"></div>
+    </div>
+
+    <div id="status-pill">QR 인식 대기</div>
+
+    <div id="scan-area">
+      <img id="scan-guide" src="../assets/images/scan_guide.png" alt="" />
+    </div>
+
+    <div id="bottom-panel">
+      <h2>QR코드를 화면 안에 맞춰 주세요</h2>
+      <p>기기를 천천히 움직여 QR코드를 찾아요</p>
+    </div>
+  </div>
+
+  <div id="permission-msg">카메라 권한이 필요합니다<br />브라우저 설정에서 카메라 접근을 허용해주세요</div>
+
+  <script type="module" src="scan.js"></script>
+</body>
+</html>
