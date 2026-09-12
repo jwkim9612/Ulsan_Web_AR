@@ -461,6 +461,7 @@ function breakLockedItem() {
     despawnRemainingIce();
     trashHintEl.textContent = '';
     statusPillEl.textContent = '미션 완료';
+    SFX.playThenLoop('ice_success', 'complete_bgm_loop');
     setTimeout(() => {
       completeOverlayEl.style.display = 'block';
     }, BREAK_EFFECT_MS + FINISH_DELAY_MS);

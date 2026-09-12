@@ -43,6 +43,7 @@ function showPuzzleFinished() {
   puzzleHud.style.display = 'none';
   puzzleHintEl.textContent = '';
   statusPillEl.textContent = '미션 완료';
+  SFX.playThenLoop('puzzle_success', 'complete_bgm_loop');
 
   setTimeout(() => {
     completeOverlayEl.style.display = 'block';
