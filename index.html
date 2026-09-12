@@ -43,8 +43,16 @@
       color: #0a2540;
     }
 
+    /* 뱃지~고래까지 한 덩어리를 헤더와 하단 블록 사이 남는 공간에서 위아래로 가운데 정렬 */
+    #hero {
+      flex: 1 1 auto;
+      width: 100%;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
     #badge {
-      margin-top: clamp(10px, 3vh, 16px);
       flex: 0 0 auto;
       background: rgba(43, 122, 226, 0.12);
       color: #1f6fb2;
@@ -75,16 +83,12 @@
     }
 
     #whale {
-      align-self: center;
       width: clamp(150px, 46vw, 260px);
       height: auto;
       flex: 0 0 auto;
       margin-top: clamp(8px, 2.5vh, 20px);
       filter: drop-shadow(0 8px 16px rgba(0, 60, 100, 0.2));
     }
-
-    /* 남은 공간을 채워서 하단 블록(모드 뱃지/시작 버튼)을 화면 하단(배경의 물결 영역)에 붙임 */
-    #spacer { flex: 1 1 auto; min-height: 12px; width: 100%; }
 
     #mode-preview {
       align-self: center;
@@ -94,20 +98,23 @@
     }
 
     .mode-card {
-      display: flex; flex-direction: column; align-items: center;
-      gap: 6px;
+      position: relative;
+      width: clamp(64px, 20vw, 92px);
     }
 
     .mode-card img {
-      width: clamp(64px, 20vw, 92px);
+      width: 100%;
       height: auto;
       display: block;
     }
 
     .mode-card span {
+      position: absolute;
+      left: 0; right: 0; bottom: 22%;
       font-size: clamp(12px, 3.2vw, 14px);
       font-weight: 700;
       color: #0a3d62;
+      text-align: center;
     }
 
     #start-btn {
@@ -115,6 +122,8 @@
       position: relative;
       width: 100%; max-width: 400px;
       border: none; padding: 0; cursor: pointer;
+      background: transparent;
+      -webkit-appearance: none; appearance: none;
       flex: 0 0 auto;
       margin-top: clamp(16px, 4vh, 24px);
       transition: filter 0.1s, transform 0.1s;
@@ -134,6 +143,7 @@
       margin-top: 10px;
       flex: 0 0 auto;
       font-size: clamp(12px, 3.2vw, 14px);
+      font-weight: 700;
       color: #4a7a9e;
       text-align: center;
     }
@@ -147,17 +157,17 @@
       <h1>울산 AR</h1>
     </div>
 
-    <div id="badge">우리 동네 AR 모험</div>
+    <div id="hero">
+      <div id="badge">우리 동네 AR 모험</div>
 
-    <div id="title">
-      <span class="line1">울산에서 만나는</span>
-      <span class="line2">신나는 고래 모험</span>
+      <div id="title">
+        <span class="line1">울산에서 만나는</span>
+        <span class="line2">신나는 고래 모험</span>
+      </div>
+      <p id="subtitle">퍼즐을 맞추고, 고래를 구해요!</p>
+
+      <img id="whale" src="assets/images/home_whale.png" alt="울산 AR 고래 마스코트" />
     </div>
-    <p id="subtitle">퍼즐을 맞추고, 고래를 구해요!</p>
-
-    <img id="whale" src="assets/images/home_whale.png" alt="울산 AR 고래 마스코트" />
-
-    <div id="spacer"></div>
 
     <div id="mode-preview">
       <div class="mode-card">
