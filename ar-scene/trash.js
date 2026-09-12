@@ -96,6 +96,12 @@ const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 �
 const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지해야 실제로 타겟팅됨(스치듯 지나가는 것 방지)
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
+// 단안 카메라 SLAM은 실측 스케일 추정이 트래킹 도중에도 계속 재조정될 수 있어서, 스폰 때는
+// SPAWN_MAX_M 안에 있던 얼음이 나중에 스케일이 커지는 쪽으로 재추정되면 실제로 훨씬 멀게
+// 느껴질 수 있다("아무리 걸어가도 안 가까워짐"). 이 거리보다 멀어지면 지금 서 있는 위치
+// 기준으로 가까이 다시 배치해서 너무 멀리 나가는 걸 막는다.
+const MAX_DRIFT_DISTANCE_M = SPAWN_MAX_M * 2;
+
 const TARGETED_ICE_SCALE = 1.12; // 타겟팅되면 얼음이 이만큼 커짐(위치는 그대로, 제자리에서 강조만)
 const GRABBED_ICE_SCALE = 1.3; // 잡으면 타겟팅 상태보다 한 단계 더 커져서 "쥐었다"는 게 구분됨
 
@@ -236,6 +242,25 @@ function getCameraPose() {
   }
 }
 
+// 스폰 후 스케일 재추정 등으로 너무 멀어진 얼음을 지금 서 있는 위치 기준으로 다시 배치한다.
+// 이미 타겟팅(lock)된 얼음은 상호작용 도중일 수 있으니 건드리지 않는다.
+function reclampFarIceItems(camPos) {
+  iceItems.forEach((t) => {
+    if (t.removed || t === lockedItem) return;
+    if (dist(camPos, t.worldPos) <= MAX_DRIFT_DISTANCE_M) return;
+
+    const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos((Math.random() * 2) - 1);
+    t.worldPos = {
+      x: camPos.x + radius * Math.sin(phi) * Math.cos(theta),
+      y: camPos.y + SPAWN_HEIGHT_OFFSET_M + radius * Math.sin(phi) * Math.sin(theta) * 0.4,
+      z: camPos.z + radius * Math.cos(phi),
+    };
+    t.el.setAttribute('position', `${t.worldPos.x} ${t.worldPos.y} ${t.worldPos.z}`);
+  });
+}
+
 // 예전에는 타겟팅(lock)되면 얼음을 카메라 정면 고정 거리로 "순간이동"시켰는데, 사용자 요청으로
 // 그 방식은 없앴다. 이제 얼음은 스폰된 실제 위치에 계속 그대로 있고, 타겟팅되면(onLockStart)
 // 그 자리에서 파티클 이펙트(targetFx)가 뜨고 살짝 커지는(TARGETED_ICE_SCALE) 것으로만 표시한다.
@@ -246,6 +271,8 @@ function updateLock() {
   const pose = getCameraPose();
   if (!pose) return;
   const { camPos, forward } = pose;
+
+  reclampFarIceItems(camPos);
 
   // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
   const candidate = iceItems.find((t) => {
@@ -456,10 +483,11 @@ hands.onResults((results) => {
     return;
   }
 
-  for (const landmarks of results.multiHandLandmarks) {
-    drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, { color: '#2ea5ff', lineWidth: 3 });
-    drawLandmarks(handCtx, landmarks, { color: '#ffffff', fillColor: '#2ea5ff', radius: 4 });
-  }
+  // 손 뼈대(랜드마크) 시각화 — 사용자 요청으로 잠시 꺼둠(필요하면 주석 해제해서 다시 켤 것).
+  // for (const landmarks of results.multiHandLandmarks) {
+  //   drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, { color: '#2ea5ff', lineWidth: 3 });
+  //   drawLandmarks(handCtx, landmarks, { color: '#ffffff', fillColor: '#2ea5ff', radius: 4 });
+  // }
 
   if (!lockedItem) return;
 

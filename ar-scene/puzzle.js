@@ -56,6 +56,12 @@ const COLLECT_DISTANCE_M = 3.0; // 이 거리 안이면서 아래 각도 조건�
 const COLLECT_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const DWELL_MS = 1000; // 거리+응시 조건을 이만큼 끊기지 않고 유지해야 조각을 채움
 
+// 단안 카메라 SLAM은 실측 스케일 추정이 트래킹 도중에도 계속 재조정될 수 있어서, 스폰 때는
+// SPAWN_MAX_M 안에 있던 조각이 나중에 스케일이 커지는 쪽으로 재추정되면 실제로 훨씬 멀게
+// 느껴질 수 있다("아무리 걸어가도 안 가까워짐"). 이 거리보다 멀어지면 지금 서 있는 위치
+// 기준으로 가까이 다시 배치해서 너무 멀리 나가는 걸 막는다.
+const MAX_DRIFT_DISTANCE_M = SPAWN_MAX_M * 2;
+
 let puzzleTargets = []; // { el, worldPos, index, collected, gazeStartedAt }
 
 // TODO: plane placeholder를 실제 조각 3D 모델(glb 등)로 교체 가능.
@@ -118,6 +124,20 @@ function checkProximity(camPos, camRot) {
 
   puzzleTargets.forEach((t) => {
     if (t.collected) return;
+
+    if (dist(camPos, t.worldPos) > MAX_DRIFT_DISTANCE_M) {
+      const radius = SPAWN_MIN_M + Math.random() * (SPAWN_MAX_M - SPAWN_MIN_M);
+      const angle = Math.random() * Math.PI * 2;
+      t.worldPos = {
+        x: camPos.x + radius * Math.cos(angle),
+        y: camPos.y + SPAWN_HEIGHT_OFFSET_M + (Math.random() * 2 - 1) * SPAWN_HEIGHT_VARIATION_M,
+        z: camPos.z + radius * Math.sin(angle),
+      };
+      t.el.setAttribute('position', `${t.worldPos.x} ${t.worldPos.y} ${t.worldPos.z}`);
+      t.gazeStartedAt = null;
+      return;
+    }
+
     faceCamera(t, camPos);
 
     let gazing = false;
