@@ -104,7 +104,7 @@ function spawnPuzzleTargets() {
 
     const el = document.createElement('a-entity');
     el.setAttribute('geometry', 'primitive: plane; width: 0.4; height: 0.4');
-    el.setAttribute('material', `src: ${PIECE_IMAGES[index]}; side: double`);
+    el.setAttribute('material', `src: ${PIECE_IMAGES[index]}; side: double; transparent: true; alphaTest: 0.5`);
     el.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
     puzzleTargetsRoot.appendChild(el);
 
