@@ -15,9 +15,24 @@
     // 캐시된 Audio를 재사용하면 빠르게 연타할 때 이전 재생이 끊기므로,
     // 매번 새 Audio 인스턴스로 재생해서 겹쳐 들리게 한다.
     const audio = new Audio(src(name));
-    audio.play().catch(() => {});
+    audio.play().catch((err) => console.warn('[SFX] 재생 실패:', name, err));
     return audio;
   }
+
+  // --- 모바일 오디오 자동재생 잠금 해제 ---
+  // 퍼즐/고래구조 페이지의 효과음은 클릭이 아니라 AR 트래킹 tick 콜백(거리/응시 판정, 손 인식
+  // 결과)에서 재생을 시도한다. 그런데 이 페이지들은 이전 화면(카메라 켜기 버튼 등)의 사용자
+  // 제스처가 이어지지 않는 새 문서라, 브라우저 자동재생 정책에 따라 이 첫 프로그램적 재생
+  // 시도가 조용히 막힐 수 있다(기기/세션마다 다르게 막혀서 "가끔 소리가 안 남"으로 보임).
+  // 이 문서 안에서 사용자가 처음 화면을 터치/클릭하는 순간(뒤로가기 버튼이든 그냥 화면을
+  // 만지는 것이든) 무음에 가까운 초단타 오디오를 재생해두면, 그 뒤로 같은 문서 안에서
+  // 코드로 트리거하는 재생도 대부분의 모바일 브라우저에서 허용된다.
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  function unlockAudio() {
+    const unlock = new Audio(SILENT_WAV);
+    unlock.play().then(() => unlock.pause()).catch(() => {});
+  }
+  document.addEventListener('pointerdown', unlockAudio, { once: true, capture: true });
 
   function playThenLoop(name, loopName) {
     const audio = play(name);

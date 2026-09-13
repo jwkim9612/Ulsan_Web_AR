@@ -58,6 +58,14 @@ const PREFETCH_URLS = [
   '../assets/images/complete_whale.png',
   '../assets/images/complete_trash_bg.png',
   '../assets/images/complete_puzzle_bg.png',
+  // 1회성 효과음도 프리로드해둔다 — 재생 시점에 그때 fetch하면 이동통신망에서 느려지거나
+  // 실패해서 소리가 안 나는 경우가 생길 수 있다.
+  '../assets/sounds/puzzle_collect.wav',
+  '../assets/sounds/puzzle_success.wav',
+  '../assets/sounds/ice_collect.wav',
+  '../assets/sounds/ice_success.wav',
+  '../assets/sounds/complete_bgm_loop.wav',
+  '../assets/sounds/button_click.wav',
 ];
 const PREFETCH_DELAY_MS = 800; // 카메라/마커 인식 시작 직후 순간의 부하와 안 겹치게 살짝 늦춤
 
