@@ -12,6 +12,10 @@
 // 내보내도 코드 수정 없이 항상 일관된 크기로 보인다.
 //
 // 퍼즐 모드(index.html)도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리돼 있다.
+//
+// 이 외에 장식용으로 고래 3마리(`assets/models/Whale_Low.glb`)를 얼음보다 멀찍이 흩뿌려두는데,
+// 이쪽은 상호작용이 전혀 없고 그냥 Swimming 애니메이션(gltf-animation 컴포넌트)을 재생하며
+// 완만하게 위아래로 흔들리기만 한다.
 
 const backBtn = document.getElementById('back-btn');
 const trashRoot = document.getElementById('trash-root');
@@ -123,6 +127,67 @@ const ICE_MODEL_TARGET_SIZE_M = 0.45; // 모델의 가장 긴 변이 대략 이 
 
 const MASCOT_MODEL_URL = '../assets/models/Jangsaengi.glb';
 const MASCOT_MODEL_TARGET_SIZE_M = 0.2; // 얼음(0.35m)보다 한 단계 작게 — 얼음 속에 들어있는 느낌
+
+// --- 배경 장식용 고래(상호작용 없음, 그냥 주변에서 헤엄치는 것처럼 보이기만 함) ---
+const WHALE_MODEL_URL = '../assets/models/Whale_Low.glb';
+const WHALE_TARGET_SIZE_M = 0.9;
+const WHALE_COUNT = 3;
+const WHALE_SPAWN_MIN_M = 2.0;
+const WHALE_SPAWN_MAX_M = 4.0; // 얼음보다 멀찍이 둬서 상호작용 대상과 안 헷갈리게 함
+const WHALE_HEIGHT_OFFSET_M = 0.9;
+
+// glTF 모델 안에 내보내진 애니메이션 클립을 THREE.AnimationMixer로 재생하는 범용 컴포넌트.
+// 8th Wall 전용 A-Frame 빌드(vendor/8frame-1.5.0.min.js)에는 aframe-extras의 animation-mixer가
+// 없어서 직접 만듦 — tick()에서 매 프레임 mixer를 갱신해야 실제로 재생된다.
+AFRAME.registerComponent('gltf-animation', {
+  schema: { clip: { type: 'string', default: '' } },
+  init() {
+    this.mixer = null;
+    this.el.addEventListener('model-loaded', (e) => {
+      const mesh = (e.detail && e.detail.model) || this.el.getObject3D('mesh');
+      if (!mesh || !mesh.animations || !mesh.animations.length) return;
+      const clip = (this.data.clip && mesh.animations.find((c) => c.name === this.data.clip))
+        || mesh.animations[0];
+      this.mixer = new AFRAME.THREE.AnimationMixer(mesh);
+      this.mixer.clipAction(clip).play();
+    });
+  },
+  tick(time, timeDelta) {
+    if (this.mixer) this.mixer.update(timeDelta / 1000);
+  },
+});
+
+// 상호작용 없이 그냥 사용자 주변에 흩어놓고 완만하게 위아래/앞뒤로 흔들리게만 한다(헤엄 애니메이션
+// 자체는 gltf-animation이 담당, 이 위치 애니메이션은 "제자리 헤엄"이 아니라 "주변을 맴도는" 느낌만 더함).
+function spawnDecorativeWhales() {
+  const pose = getCameraPose();
+  const origin = pose ? pose.camPos : { x: 0, y: 0, z: 0 };
+
+  const sector = (Math.PI * 2) / WHALE_COUNT;
+  for (let i = 0; i < WHALE_COUNT; i++) {
+    const radius = WHALE_SPAWN_MIN_M + Math.random() * (WHALE_SPAWN_MAX_M - WHALE_SPAWN_MIN_M);
+    const theta = sector * i + Math.random() * sector;
+    const x = origin.x + radius * Math.cos(theta);
+    const z = origin.z + radius * Math.sin(theta);
+    const y = origin.y + WHALE_HEIGHT_OFFSET_M + (Math.random() * 0.6 - 0.3);
+
+    const wrapper = document.createElement('a-entity');
+    wrapper.setAttribute('position', `${x} ${y} ${z}`);
+    wrapper.setAttribute('rotation', `0 ${Math.random() * 360} 0`);
+
+    const bobTo = `${x} ${y + 0.25} ${z}`;
+    wrapper.setAttribute('animation__bob', `property: position; to: ${bobTo}; dir: alternate; loop: true; dur: ${2400 + Math.random() * 1200}; easing: easeInOutSine`);
+    wrapper.setAttribute('animation__turn', `property: rotation; to: 0 ${Math.random() * 360} 0; dir: alternate; loop: true; dur: ${6000 + Math.random() * 3000}; easing: easeInOutSine`);
+
+    const whaleEl = document.createElement('a-entity');
+    whaleEl.setAttribute('gltf-model', `url(${WHALE_MODEL_URL})`);
+    whaleEl.setAttribute('gltf-animation', 'clip: Swimming');
+    fitLoadedModel(whaleEl, WHALE_TARGET_SIZE_M);
+    wrapper.appendChild(whaleEl);
+
+    trashRoot.appendChild(wrapper);
+  }
+}
 
 // glb 원본의 스케일/피벗은 만든 툴마다 제각각이라, 로드된 실제 바운딩 박스를 기준으로
 // 크기를 목표 치수에 맞게 자동 스케일하고 중심을 엔티티 원점에 맞춰준다. 이렇게 해두면
@@ -665,6 +730,7 @@ const onxrloaded = () => {
 
   warmupHands();
   spawnIceItems();
+  spawnDecorativeWhales();
 };
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
