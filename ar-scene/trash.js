@@ -535,6 +535,7 @@ function breakLockedItem() {
       completeOverlayEl.style.display = 'block';
     }, BREAK_EFFECT_MS + FINISH_DELAY_MS);
   } else {
+    SFX.play('ice_collect');
     trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';
   }
 }

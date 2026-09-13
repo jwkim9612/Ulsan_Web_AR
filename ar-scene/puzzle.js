@@ -42,6 +42,7 @@ function collectPiece(targetIndex) {
   if (collectedPieces.size === PIECE_NAMES.length) {
     showPuzzleFinished();
   } else {
+    SFX.play('puzzle_collect');
     puzzleHintEl.textContent = '다음 조각을 찾아 다가가 보세요';
   }
 }
