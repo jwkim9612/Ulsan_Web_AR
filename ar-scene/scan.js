@@ -66,6 +66,7 @@ const PREFETCH_URLS = [
   '../assets/sounds/ice_success.wav',
   '../assets/sounds/complete_bgm_loop.wav',
   '../assets/sounds/button_click.wav',
+  '../assets/videos/GameClearVideo.mp4',
 ];
 const PREFETCH_DELAY_MS = 800; // 카메라/마커 인식 시작 직후 순간의 부하와 안 겹치게 살짝 늦춤
 
@@ -88,4 +89,15 @@ async function start() {
   setTimeout(prefetchGameAssets, PREFETCH_DELAY_MS);
 }
 
-start();
+// 두 게임을 모두 클리어한 채로 이 화면에 돌아왔으면, 평소의 카메라/마커 스캔 대신 올클리어
+// 영상을 먼저 보여준다. 영상이 끝나면 클리어 기록을 지우고(다음에 또 둘 다 깨면 다시 재생되게)
+// 평소처럼 카메라를 켠다.
+if (window.GameClear && GameClear.isBothCleared()) {
+  const allClearVideoEl = document.getElementById('allclear-video');
+  GameClear.playVideo(allClearVideoEl, () => {
+    GameClear.resetCleared();
+    start();
+  });
+} else {
+  start();
+}

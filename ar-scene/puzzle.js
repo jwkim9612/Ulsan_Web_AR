@@ -21,6 +21,7 @@ const puzzleHintEl = document.getElementById('puzzle-hint');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 const completeWhaleImgEl = document.getElementById('complete-whale');
+const clearVideoEl = document.getElementById('clear-video');
 
 // 다 맞춘 순간에 src를 지정하면 디코딩 지연으로 살짝 깜빡여 보임 —
 // 미리 받아서 decode()까지 끝내둔 다음, 필요할 때는 display만 바꾼다.
@@ -70,8 +71,11 @@ function showPuzzleFinished() {
   puzzleHintEl.textContent = '';
   statusPillEl.textContent = '미션 완료';
   SFX.playThenLoop('puzzle_success', 'complete_bgm_loop');
+  GameClear.markCleared('puzzle');
 
-  setTimeout(revealCompleteOverlay, FINISH_DELAY_MS);
+  setTimeout(() => {
+    GameClear.playVideo(clearVideoEl, revealCompleteOverlay);
+  }, FINISH_DELAY_MS);
 }
 
 PIECE_NAMES.forEach((name, targetIndex) => {

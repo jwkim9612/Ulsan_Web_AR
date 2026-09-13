@@ -124,6 +124,12 @@
       color: #fff; font-size: 16px; line-height: 1.6;
       background: rgba(0, 0, 0, 0.8); padding: 24px; box-sizing: border-box;
     }
+
+    /* 두 게임을 모두 클리어했을 때 카메라 대신 먼저 재생하는 올클리어 영상 */
+    #allclear-video {
+      position: fixed; inset: 0; z-index: 60; display: none;
+      width: 100%; height: 100%; object-fit: contain; background: #000;
+    }
   </style>
 </head>
 <body>
@@ -157,7 +163,10 @@
 
   <div id="permission-msg">카메라 권한이 필요합니다<br />브라우저 설정에서 카메라 접근을 허용해주세요</div>
 
+  <video id="allclear-video" src="../assets/videos/AllClearVideo.mp4" playsinline webkit-playsinline preload="auto"></video>
+
   <script src="../assets/sfx.js" data-base="../assets/sounds/"></script>
+  <script src="../assets/game-clear.js"></script>
   <script type="module" src="scan.js"></script>
 </body>
 </html>

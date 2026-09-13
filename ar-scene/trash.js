@@ -26,6 +26,7 @@ const trashFinishedEl = document.getElementById('trash-finished');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 const completeWhaleImgEl = document.getElementById('complete-whale');
+const clearVideoEl = document.getElementById('clear-video');
 const handCanvas = document.getElementById('hand-canvas');
 
 // 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
@@ -554,10 +555,13 @@ function breakLockedItem() {
     trashHintEl.textContent = '';
     statusPillEl.textContent = '미션 완료';
     SFX.playThenLoop('ice_success', 'complete_bgm_loop');
+    GameClear.markCleared('trash');
     setTimeout(() => {
       trashFinishedEl.style.display = 'block';
     }, BREAK_EFFECT_MS);
-    setTimeout(revealCompleteOverlay, BREAK_EFFECT_MS + FINISH_DELAY_MS);
+    setTimeout(() => {
+      GameClear.playVideo(clearVideoEl, revealCompleteOverlay);
+    }, BREAK_EFFECT_MS + FINISH_DELAY_MS);
   } else {
     SFX.play('ice_collect');
     trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';
