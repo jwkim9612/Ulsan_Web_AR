@@ -5,7 +5,12 @@
 // 고래구조 모드도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리되어 있다(trash.html).
 
 const PIECE_NAMES = ['p_1', 'p_2', 'p_3', 'p_4'];
-const PIECE_IMAGES = PIECE_NAMES.map((name) => `../assets/images/${name}.png`);
+// index.html의 <a-assets>에 등록된 #id — material src로 이 selector를 쓰면 A-Frame이 이미
+// 씬 로딩 단계에서 디코딩해둔 이미지/텍스처를 그대로 재사용한다(spawnPuzzleTargets 시점의
+// 디코딩 지연 제거). HUD 슬롯 배경은 같은 <img> 엘리먼트의 실제 src를 그대로 읽어서 쓴다 —
+// URL을 따로 하드코딩하지 않아 두 곳이 항상 같은 자산을 가리킨다.
+const PIECE_ASSET_IDS = PIECE_NAMES.map((_, index) => `#piece-${index}-asset`);
+const PIECE_IMAGES = PIECE_ASSET_IDS.map((id) => document.querySelector(id).src);
 const FINISHED_IMAGE = '../assets/images/1.png';
 const FINISH_DELAY_MS = 2000; // 마지막 조각을 모으고 이만큼 뒤에 완료 화면을 띄움
 
@@ -15,15 +20,27 @@ const puzzleFinishedEl = document.getElementById('puzzle-finished');
 const puzzleHintEl = document.getElementById('puzzle-hint');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
+const completeWhaleImgEl = document.getElementById('complete-whale');
 
 // 다 맞춘 순간에 src를 지정하면 디코딩 지연으로 살짝 깜빡여 보임 —
 // 미리 받아서 decode()까지 끝내둔 다음, 필요할 때는 display만 바꾼다.
 puzzleFinishedEl.src = FINISHED_IMAGE;
 puzzleFinishedEl.decode().catch(() => {});
 
+// 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
+// fetch되어 조각 텍스처 프리로드와 대역폭을 다툰다. data-src로 미뤄뒀다가 실제로 완료 화면을
+// 띄우기 직전에만 fetch되도록 한다.
+function revealCompleteOverlay() {
+  if (completeWhaleImgEl.dataset.src) {
+    completeWhaleImgEl.src = completeWhaleImgEl.dataset.src;
+    delete completeWhaleImgEl.dataset.src;
+  }
+  completeOverlayEl.style.display = 'block';
+}
+
 // 미리보기용: index.html?preview=complete 로 접속하면 게임 진행 없이 완료 화면부터 바로 보임.
 if (new URLSearchParams(location.search).get('preview') === 'complete') {
-  completeOverlayEl.style.display = 'block';
+  revealCompleteOverlay();
 }
 
 backBtn.addEventListener('click', () => {
@@ -54,9 +71,7 @@ function showPuzzleFinished() {
   statusPillEl.textContent = '미션 완료';
   SFX.playThenLoop('puzzle_success', 'complete_bgm_loop');
 
-  setTimeout(() => {
-    completeOverlayEl.style.display = 'block';
-  }, FINISH_DELAY_MS);
+  setTimeout(revealCompleteOverlay, FINISH_DELAY_MS);
 }
 
 PIECE_NAMES.forEach((name, targetIndex) => {
@@ -105,7 +120,7 @@ function spawnPuzzleTargets() {
 
     const el = document.createElement('a-entity');
     el.setAttribute('geometry', 'primitive: plane; width: 0.4; height: 0.4');
-    el.setAttribute('material', `src: ${PIECE_IMAGES[index]}; side: double; transparent: true; alphaTest: 0.5`);
+    el.setAttribute('material', `src: ${PIECE_ASSET_IDS[index]}; side: double; transparent: true; alphaTest: 0.5`);
     el.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
     puzzleTargetsRoot.appendChild(el);
 
@@ -126,16 +141,23 @@ function dist(a, b) {
 // 정면도 원래 +Z라서 lookAt()만으로 이미 정면이 카메라를 향한다. (여기에 180도를 더 돌리면
 // 정면이 반대로 돌아가 뒷면이 보이는데, side:double이라 뒷면도 렌더링은 되지만 같은 텍스처가
 // 좌우반전으로 보이게 된다 — 실제로 겪었던 버그.)
+// 매 프레임, 타겟마다 호출되므로(최대 4개 x 매 프레임) new Vector3/Quaternion을 계속 만들지
+// 않고 재사용 — GC 압박을 줄여 플레이 도중 체감 렉을 완화한다.
+const lookTargetScratch = new AFRAME.THREE.Vector3();
+const forwardScratch = new AFRAME.THREE.Vector3();
+const camQuatScratch = new AFRAME.THREE.Quaternion();
+const toTargetScratch = new AFRAME.THREE.Vector3();
+
 function faceCamera(t, camPos) {
-  const lookTarget = new AFRAME.THREE.Vector3(camPos.x, t.worldPos.y, camPos.z);
-  t.el.object3D.lookAt(lookTarget);
+  lookTargetScratch.set(camPos.x, t.worldPos.y, camPos.z);
+  t.el.object3D.lookAt(lookTargetScratch);
 }
 
 function checkProximity(camPos, camRot) {
   let forward;
   try {
-    forward = new AFRAME.THREE.Vector3(0, 0, -1)
-      .applyQuaternion(new AFRAME.THREE.Quaternion(camRot.x, camRot.y, camRot.z, camRot.w));
+    camQuatScratch.set(camRot.x, camRot.y, camRot.z, camRot.w);
+    forward = forwardScratch.set(0, 0, -1).applyQuaternion(camQuatScratch);
   } catch (e) {
     console.error('[puzzle] 카메라 방향 계산 실패', e);
     return;
@@ -163,10 +185,8 @@ function checkProximity(camPos, camRot) {
 
     let gazing = false;
     if (dist(camPos, t.worldPos) < COLLECT_DISTANCE_M) {
-      const toTarget = new AFRAME.THREE.Vector3(
-        t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
-      ).normalize();
-      gazing = toTarget.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD;
+      toTargetScratch.set(t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z).normalize();
+      gazing = toTargetScratch.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD;
     }
 
     if (!gazing) {

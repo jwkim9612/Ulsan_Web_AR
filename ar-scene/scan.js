@@ -41,6 +41,32 @@ function onFound(target) {
   }, 600);
 }
 
+// 마커 인식을 기다리는 동안(보통 몇 초는 걸림) 카메라만 돌고 있어 여유가 있다. 이 시간에
+// 두 게임(퍼즐/고래구조)이 쓰는 무거운 자산을 미리 fetch해서 브라우저 HTTP 캐시를 채워두면,
+// 실제로 다음 페이지(index.html/trash.html)로 넘어갔을 때 <a-assets>가 네트워크 왕복 없이
+// 캐시에서 바로 읽어와 훨씬 빨리 준비된다. 어느 마커가 인식될지 여기선 모르므로 양쪽 게임
+// 자산을 다 대상으로 한다 — 실패해도 캐시 예열 목적일 뿐이라 그냥 무시한다.
+const PREFETCH_URLS = [
+  '../assets/models/Ice.glb',
+  '../assets/models/Jangsaengi.glb',
+  '../assets/models/Whale_Low.glb',
+  '../assets/images/p_1.png',
+  '../assets/images/p_2.png',
+  '../assets/images/p_3.png',
+  '../assets/images/p_4.png',
+  '../assets/images/1.png',
+  '../assets/images/complete_whale.png',
+  '../assets/images/complete_trash_bg.png',
+  '../assets/images/complete_puzzle_bg.png',
+];
+const PREFETCH_DELAY_MS = 800; // 카메라/마커 인식 시작 직후 순간의 부하와 안 겹치게 살짝 늦춤
+
+function prefetchGameAssets() {
+  for (const url of PREFETCH_URLS) {
+    fetch(url, { priority: 'low' }).catch(() => {});
+  }
+}
+
 async function start() {
   try {
     await mindarThree.start();
@@ -51,6 +77,7 @@ async function start() {
   }
   const { renderer, scene, camera } = mindarThree;
   renderer.setAnimationLoop(() => renderer.render(scene, camera));
+  setTimeout(prefetchGameAssets, PREFETCH_DELAY_MS);
 }
 
 start();

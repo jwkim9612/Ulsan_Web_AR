@@ -231,6 +231,14 @@
 <body>
   <a-scene xrextras-gesture-detector landing-page xrextras-loading xrextras-runtime-error
     renderer="colorManagement:true" xrweb="allowedDevices: MOBILE_AND_HEADSETS">
+    <!-- 모델을 여기서 미리 fetch/parse해두면(로딩 화면이 떠 있는 이 구간에서 끝남), 게임 시작
+         시점(spawnIceItems/spawnDecorativeWhales)엔 이미 파싱된 결과를 클론만 하면 되어
+         AR 트래킹 시작과 겹쳐서 나던 렉이 사라진다. -->
+    <a-assets timeout="15000">
+      <a-asset-item id="ice-model-asset" src="../assets/models/Ice.glb"></a-asset-item>
+      <a-asset-item id="mascot-model-asset" src="../assets/models/Jangsaengi.glb"></a-asset-item>
+      <a-asset-item id="whale-model-asset" src="../assets/models/Whale_Low.glb"></a-asset-item>
+    </a-assets>
     <a-camera position="0 0 0"></a-camera>
     <a-light type="ambient" intensity="1"></a-light>
     <a-entity id="trash-root"></a-entity>
@@ -273,7 +281,7 @@
           <span>고래 구조 · 미션 성공</span>
         </div>
         <h1 id="complete-title">고래 구조 성공!</h1>
-        <img id="complete-whale" src="../assets/images/complete_whale.png" alt="" />
+        <img id="complete-whale" data-src="../assets/images/complete_whale.png" alt="" />
         <div id="complete-card">
           <h2>정말 잘했어요!</h2>
           <p>고래가 다시 자유로워졌어요. 고마워요!</p>

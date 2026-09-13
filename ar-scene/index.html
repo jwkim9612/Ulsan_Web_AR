@@ -232,6 +232,15 @@
 <body>
   <a-scene xrextras-gesture-detector landing-page xrextras-loading xrextras-runtime-error
     renderer="colorManagement:true" xrweb="allowedDevices: MOBILE_AND_HEADSETS">
+    <!-- 조각 텍스처를 여기서 미리 로드해두면(로딩 화면이 떠 있는 이 구간에서 끝남), A-Frame이
+         이미 디코딩된 텍스처를 그대로 재사용해서 spawnPuzzleTargets() 시점(SCALE_SETTLE_MS 뒤)의
+         디코딩 지연이 사라진다. -->
+    <a-assets timeout="8000">
+      <img id="piece-0-asset" src="../assets/images/p_1.png" crossorigin="anonymous">
+      <img id="piece-1-asset" src="../assets/images/p_2.png" crossorigin="anonymous">
+      <img id="piece-2-asset" src="../assets/images/p_3.png" crossorigin="anonymous">
+      <img id="piece-3-asset" src="../assets/images/p_4.png" crossorigin="anonymous">
+    </a-assets>
     <a-camera position="0 0 0"></a-camera>
     <a-light type="ambient" intensity="1"></a-light>
     <a-entity id="puzzle-targets-root"></a-entity>
@@ -277,7 +286,7 @@
           <span>고래 퍼즐 · 미션 성공</span>
         </div>
         <h1 id="complete-title">퍼즐 완성!</h1>
-        <img id="complete-whale" src="../assets/images/complete_whale.png" alt="" />
+        <img id="complete-whale" data-src="../assets/images/complete_whale.png" alt="" />
         <div id="complete-card">
           <h2>정말 잘했어요!</h2>
           <p>모든 조각을 모았어요. 정말 멋져요!</p>

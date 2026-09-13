@@ -25,11 +25,23 @@ const trashHintEl = document.getElementById('trash-hint');
 const trashFinishedEl = document.getElementById('trash-finished');
 const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
+const completeWhaleImgEl = document.getElementById('complete-whale');
 const handCanvas = document.getElementById('hand-canvas');
+
+// 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
+// fetch되어 초기 로딩(=글b 프리로드)과 대역폭을 다툰다. data-src로 미뤄뒀다가 실제로 완료
+// 화면을 띄우기 직전에만 fetch되도록 한다.
+function revealCompleteOverlay() {
+  if (completeWhaleImgEl.dataset.src) {
+    completeWhaleImgEl.src = completeWhaleImgEl.dataset.src;
+    delete completeWhaleImgEl.dataset.src;
+  }
+  completeOverlayEl.style.display = 'block';
+}
 
 // 미리보기용: trash.html?preview=complete 로 접속하면 게임 진행 없이 완료 화면부터 바로 보임.
 if (new URLSearchParams(location.search).get('preview') === 'complete') {
-  completeOverlayEl.style.display = 'block';
+  revealCompleteOverlay();
 }
 const handCtx = handCanvas.getContext('2d');
 
@@ -122,14 +134,18 @@ let rescuedCount = 0;
 let lockCandidate = null; // 거리+응시 조건을 만족하기 시작한 얼음(아직 확정 lock 전)
 let lockCandidateStartedAt = null;
 
-const ICE_MODEL_URL = '../assets/models/Ice.glb';
+// trash.html의 <a-assets>에 등록된 #id를 참조 — 이렇게 하면 씬 로딩 단계(xrextras-loading이
+// 떠 있는 동안)에 A-Frame이 한 번만 fetch/parse해두고, 아래에서 5/5/3개씩 만드는 인스턴스는
+// 그 파싱 결과를 클론해서 쓴다. 원시 URL을 직접 주면 인스턴스마다 독립적으로 재요청되어
+// AR 트래킹이 막 시작되는 순간과 겹쳐 렉의 주 원인이 됐었다.
+const ICE_MODEL_URL = '#ice-model-asset';
 const ICE_MODEL_TARGET_SIZE_M = 0.45; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
 
-const MASCOT_MODEL_URL = '../assets/models/Jangsaengi.glb';
+const MASCOT_MODEL_URL = '#mascot-model-asset';
 const MASCOT_MODEL_TARGET_SIZE_M = 0.2; // 얼음(0.35m)보다 한 단계 작게 — 얼음 속에 들어있는 느낌
 
 // --- 배경 장식용 고래(상호작용 없음, 그냥 주변에서 헤엄치는 것처럼 보이기만 함) ---
-const WHALE_MODEL_URL = '../assets/models/Whale_Low.glb';
+const WHALE_MODEL_URL = '#whale-model-asset';
 const WHALE_TARGET_SIZE_M = 0.9;
 const WHALE_COUNT = 3;
 const WHALE_SPAWN_MIN_M = 2.0;
@@ -180,7 +196,7 @@ function spawnDecorativeWhales() {
     wrapper.setAttribute('animation__turn', `property: rotation; to: 0 ${Math.random() * 360} 0; dir: alternate; loop: true; dur: ${6000 + Math.random() * 3000}; easing: easeInOutSine`);
 
     const whaleEl = document.createElement('a-entity');
-    whaleEl.setAttribute('gltf-model', `url(${WHALE_MODEL_URL})`);
+    whaleEl.setAttribute('gltf-model', WHALE_MODEL_URL);
     whaleEl.setAttribute('gltf-animation', 'clip: Swimming');
     fitLoadedModel(whaleEl, WHALE_TARGET_SIZE_M);
     wrapper.appendChild(whaleEl);
@@ -266,12 +282,12 @@ function spawnIceItems() {
     wrapper.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
 
     const iceEl = document.createElement('a-entity');
-    iceEl.setAttribute('gltf-model', `url(${ICE_MODEL_URL})`);
+    iceEl.setAttribute('gltf-model', ICE_MODEL_URL);
     fitLoadedModel(iceEl, ICE_MODEL_TARGET_SIZE_M);
     wrapper.appendChild(iceEl);
 
     const mascotEl = document.createElement('a-entity');
-    mascotEl.setAttribute('gltf-model', `url(${MASCOT_MODEL_URL})`);
+    mascotEl.setAttribute('gltf-model', MASCOT_MODEL_URL);
     fitLoadedModel(mascotEl, MASCOT_MODEL_TARGET_SIZE_M);
     mascotEl.setAttribute('visible', false); // 깨지기 전까지는 숨김
     wrapper.appendChild(mascotEl);
@@ -299,13 +315,22 @@ function dist(a, b) {
 // 오브젝트가 화면 중앙이 아니라 한쪽으로 쏠려 보이거나(왼쪽/오른쪽 고정) 사용자가 계속
 // 움직이는 동안 그 오차가 누적돼 점점 화면 밖으로 밀려나는 것처럼 보이는 원인이었다.
 // a-camera 자체에서 읽으면 렌더링에 쓰인 포즈와 항상 정확히 일치한다.
+// 매 프레임 호출되므로(updateLock -> onUpdate) 매번 새 Vector3/Quaternion을 만들지 않고
+// 재사용 — GC 압박을 줄여 인터랙션 중 프레임 드랍(체감 렉)을 완화한다. 반환값을 오래
+// 들고 있지 않고 그 프레임 안에서만 쓰는 호출부라 재사용해도 안전하다.
+const poseScratch = {
+  camPos: new AFRAME.THREE.Vector3(),
+  camQuat: new AFRAME.THREE.Quaternion(),
+  forward: new AFRAME.THREE.Vector3(),
+};
+const toItemScratch = new AFRAME.THREE.Vector3();
+
 function getCameraPose() {
   try {
-    const camPos = new AFRAME.THREE.Vector3();
-    const camQuat = new AFRAME.THREE.Quaternion();
+    const { camPos, camQuat, forward } = poseScratch;
     cameraEl.object3D.getWorldPosition(camPos);
     cameraEl.object3D.getWorldQuaternion(camQuat);
-    const forward = new AFRAME.THREE.Vector3(0, 0, -1).applyQuaternion(camQuat);
+    forward.set(0, 0, -1).applyQuaternion(camQuat);
     return { camPos, forward };
   } catch (e) {
     console.error('[ice] 카메라 위치/방향 계산 실패', e);
@@ -349,10 +374,8 @@ function updateLock() {
   // 순수 실측 거리만 보지 않고, "바라보고 있으면서 + 어느 정도 가까워졌는지"를 같이 본다.
   const candidate = iceItems.find((t) => {
     if (t.removed || dist(camPos, t.worldPos) >= LOCK_DISTANCE_M) return false;
-    const toItem = new AFRAME.THREE.Vector3(
-      t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z,
-    ).normalize();
-    return toItem.dot(forward) >= LOCK_GAZE_DOT_THRESHOLD;
+    toItemScratch.set(t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z).normalize();
+    return toItemScratch.dot(forward) >= LOCK_GAZE_DOT_THRESHOLD;
   });
 
   // 조건을 만족하는 순간 바로 타겟팅하지 않고, LOCK_DWELL_MS만큼 그 얼음을 계속 바라보고
@@ -460,7 +483,10 @@ function spawnShards(wrapper) {
   for (let i = 0; i < SHARD_COUNT; i++) {
     const shard = document.createElement('a-entity');
     shard.setAttribute('geometry', 'primitive: plane; width: 0.06; height: 0.06');
-    shard.setAttribute('material', 'color: #bfe8ff; opacity: 0.9; transparent: true; side: double');
+    // shader: flat — 기본 standard 셰이더(PBR, 조명/환경맵 계산 필요)보다 훨씬 가벼워서 얼음을 깰
+    // 때마다(최대 3회) 7개씩 새로 만드는 이 이펙트 조각들의 생성 비용을 줄인다. targetFx의 halo/dot
+    // 파티클도 같은 이유로 flat을 쓴다.
+    shard.setAttribute('material', 'color: #bfe8ff; shader: flat; opacity: 0.9; transparent: true; side: double');
     shard.setAttribute('position', '0 0 0');
 
     const angle = Math.random() * Math.PI * 2;
@@ -531,9 +557,7 @@ function breakLockedItem() {
     setTimeout(() => {
       trashFinishedEl.style.display = 'block';
     }, BREAK_EFFECT_MS);
-    setTimeout(() => {
-      completeOverlayEl.style.display = 'block';
-    }, BREAK_EFFECT_MS + FINISH_DELAY_MS);
+    setTimeout(revealCompleteOverlay, BREAK_EFFECT_MS + FINISH_DELAY_MS);
   } else {
     SFX.play('ice_collect');
     trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';
@@ -598,13 +622,16 @@ const MEDIAPIPE_MIN_INTERVAL_MS = 120; // 시간 기반 스로틀
 let lastHandsSendAt = 0;
 const handsSourceCanvas = document.createElement('canvas');
 const handsSourceCtx = handsSourceCanvas.getContext('2d');
+let handsImageData = null; // 크기가 안 바뀌는 한 재사용 — 손 인식 활성 구간 내내 매 프레임 호출되므로 여기서 매번 새로 만들면 GC 압박이 커진다.
 
 function pixelArrayToCanvas({ rows, cols, rowBytes, pixels }) {
   if (handsSourceCanvas.width !== cols || handsSourceCanvas.height !== rows) {
     handsSourceCanvas.width = cols;
     handsSourceCanvas.height = rows;
+    handsImageData = null;
   }
-  const imageData = handsSourceCtx.createImageData(cols, rows);
+  if (!handsImageData) handsImageData = handsSourceCtx.createImageData(cols, rows);
+  const imageData = handsImageData;
   const expectedRowBytes = cols * 4; // luminance:false로 요청 -> RGBA
   if (rowBytes === expectedRowBytes) {
     imageData.data.set(pixels);
