@@ -37,7 +37,7 @@ function onFound(target) {
   statusPill.classList.add('found');
 
   setTimeout(() => {
-    location.href = target.href;
+    SFX.navigate(target.href, 0);
   }, 600);
 }
 
