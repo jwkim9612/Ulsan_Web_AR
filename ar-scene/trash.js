@@ -38,6 +38,7 @@ function revealCompleteOverlay() {
     delete completeWhaleImgEl.dataset.src;
   }
   completeOverlayEl.style.display = 'block';
+  SFX.play('whale_rescue_success.mp3');
 }
 
 // 미리보기용: trash.html?preview=complete 로 접속하면 게임 진행 없이 완료 화면부터 바로 보임.
@@ -555,7 +556,6 @@ function breakLockedItem() {
     trashHintEl.textContent = '';
     statusPillEl.textContent = '미션 완료';
     SFX.playThenLoop('ice_success', 'complete_bgm_loop');
-    SFX.play('whale_rescue_success.mp3');
     GameClear.markCleared('trash');
     setTimeout(() => {
       trashFinishedEl.style.display = 'block';
