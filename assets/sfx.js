@@ -8,7 +8,9 @@
   const BASE = document.currentScript.dataset.base;
 
   function src(name) {
-    return `${BASE}${name}.wav`;
+    // 확장자가 이미 포함된 이름(예: 'whale_rescue_success.mp3')은 그대로 쓰고,
+    // 없으면 기존 호출부(play('button_click') 등)와의 호환을 위해 .wav를 붙인다.
+    return /\.[a-z0-9]+$/i.test(name) ? `${BASE}${name}` : `${BASE}${name}.wav`;
   }
 
   function play(name) {

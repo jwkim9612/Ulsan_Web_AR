@@ -64,6 +64,7 @@ const PREFETCH_URLS = [
   '../assets/sounds/puzzle_success.wav',
   '../assets/sounds/ice_collect.wav',
   '../assets/sounds/ice_success.wav',
+  '../assets/sounds/whale_rescue_success.mp3',
   '../assets/sounds/complete_bgm_loop.wav',
   '../assets/sounds/button_click.wav',
   '../assets/videos/GameClearVideo.mp4',

@@ -555,6 +555,7 @@ function breakLockedItem() {
     trashHintEl.textContent = '';
     statusPillEl.textContent = '미션 완료';
     SFX.playThenLoop('ice_success', 'complete_bgm_loop');
+    SFX.play('whale_rescue_success.mp3');
     GameClear.markCleared('trash');
     setTimeout(() => {
       trashFinishedEl.style.display = 'block';

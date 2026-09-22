@@ -12,11 +12,9 @@
 (function () {
   const BASE = document.currentScript.dataset.base;
 
-  // 전용 트랙(assets/sounds/bgm_main_loop.wav)이 아직 없어서, 준비될 때까지는 기존
-  // complete_bgm_loop.wav를 임시로 재생해둔다. 실제 파일이 생기면 TRACK만 바꾸면 된다.
-  const TRACK = 'complete_bgm_loop';
+  const TRACK = 'bgm_main_loop.mp3';
 
-  const audio = new Audio(`${BASE}${TRACK}.wav`);
+  const audio = new Audio(`${BASE}${TRACK}`);
   audio.loop = true;
   audio.volume = 0.5;
   let started = false;
