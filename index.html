@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Ulsan_AR</title>
+  <script>
+    // 이 파일은 롤백 안전망(직접 열어도 동작)으로만 남겨둠 — 실제 진입점은
+    // app.html(iframe 기반 SPA 셸, 게임 전체 연속 BGM/내레이션 담당)이므로 바로 보낸다.
+    location.replace('app.html' + location.search + location.hash);
+  </script>
   <style>
     html, body {
       margin: 0; height: 100%; overflow: hidden;
