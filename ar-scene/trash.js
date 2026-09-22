@@ -1,11 +1,13 @@
 // AR Scene: 얼음 깨고 장생이 구하기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를
-// 추적해서 사용자 주변에 얼음 오브젝트(3D 모델, `assets/models/Ice.glb`)를 배치한다. 그 안에
-// 들어있는 장생이 마스코트도 3D 모델(`assets/models/Jangsaengi.glb`)로 구현돼 있다. 사용자가
-// 실제로 일정 거리 안까지 다가와 그 얼음을 잠깐 바라보면 "타겟팅"되는데(화면 정면으로 옮겨지지
-// 않고 제자리에서 파티클 이펙트+살짝 커지는 것으로만 표시됨), 타겟팅된 동안에만
-// XR8.CameraPixelArray로 카메라 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기
-// 존)에 잠깐 유지하면 "잡기"로 인정되고, 잡은 채로 손을 흔들면 얼음이 깨지면서(이펙트 재생)
-// 장생이가 구조된다.
+// 추적해서 사용자 주변에 얼음 오브젝트(3D 모델, `assets/models/Ice_Break.glb`)를 배치한다.
+// 얼음 재질이 반투명이라 그 안에 들어있는 장생이 마스코트(`assets/models/Jangsaeng.glb`)가
+// 스폰 때부터 Frozen_Idle 애니메이션으로 떨고 있는 게 비쳐 보인다. 사용자가 실제로 일정 거리
+// 안까지 다가와 그 얼음을 잠깐 바라보면 "타겟팅"되는데(화면 정면으로 옮겨지지 않고 제자리에서
+// 파티클 이펙트+살짝 커지는 것으로만 표시됨), 타겟팅된 동안에만 XR8.CameraPixelArray로 카메라
+// 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로
+// 인정되고, 잡은 채로 손을 흔들면 얼음이 자체 애니메이션(Ice_Break_1_5s)으로 균열·파편화되며
+// 깨지고, 장생이는 Escape -> Celebrate_Dance -> Collect_Pose 순서로 클립을 갈아타며 튀어나와
+// 춤추고 구조된다(breakLockedItem 참고).
 //
 // 두 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
 // 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
@@ -207,21 +209,41 @@ let trashDecorItems = []; // { el } — pop()한 순서대로 사라짐(스폰 �
 // glTF 모델 안에 내보내진 애니메이션 클립을 THREE.AnimationMixer로 재생하는 범용 컴포넌트.
 // 8th Wall 전용 A-Frame 빌드(vendor/8frame-1.5.0.min.js)에는 aframe-extras의 animation-mixer가
 // 없어서 직접 만듦 — tick()에서 매 프레임 mixer를 갱신해야 실제로 재생된다.
+// autoplay:false로 두면 로드만 해두고(글TF 기본 포즈로 정지) 재생은 안 하다가, 나중에
+// playClip()으로 원하는 시점에 원하는 클립을 재생할 수 있다 — 얼음 깨기(정지해 있다가 흔들 때만
+// 재생)나 장생이(Frozen_Idle 루프 -> Escape -> Celebrate_Dance -> Collect_Pose로 갈아타기)처럼
+// 클립을 여러 개 들고 있다가 상황에 맞게 바꿔 재생해야 하는 경우에 쓴다.
 AFRAME.registerComponent('gltf-animation', {
-  schema: { clip: { type: 'string', default: '' } },
+  schema: { clip: { type: 'string', default: '' }, autoplay: { type: 'boolean', default: true }, loop: { type: 'boolean', default: true } },
   init() {
     this.mixer = null;
+    this.clips = null;
+    this.action = null;
     this.el.addEventListener('model-loaded', (e) => {
       const mesh = (e.detail && e.detail.model) || this.el.getObject3D('mesh');
       if (!mesh || !mesh.animations || !mesh.animations.length) return;
-      const clip = (this.data.clip && mesh.animations.find((c) => c.name === this.data.clip))
-        || mesh.animations[0];
       this.mixer = new AFRAME.THREE.AnimationMixer(mesh);
-      this.mixer.clipAction(clip).play();
+      this.clips = mesh.animations;
+      if (this.data.autoplay) this.playClip(this.data.clip, { loop: this.data.loop });
     });
   },
   tick(time, timeDelta) {
     if (this.mixer) this.mixer.update(timeDelta / 1000);
+  },
+  // 이름으로 클립을 찾아 재생한다. 이미 다른 클립이 재생 중이면 멈추고 바로 전환 —
+  // 크로스페이드 없이 잘라도, 순서대로 쓰는 클립들(Frozen_Idle -> Escape -> Celebrate_Dance
+  // -> Collect_Pose)이 애초에 서로 이어지게 만들어진 세트라 튀어 보이지 않는다.
+  playClip(name, { loop = true } = {}) {
+    if (!this.mixer || !this.clips || !this.clips.length) return;
+    const clip = (name && this.clips.find((c) => c.name === name)) || this.clips[0];
+    if (this.action) this.action.stop();
+    this.action = this.mixer.clipAction(clip);
+    this.action.reset();
+    if (!loop) {
+      this.action.setLoop(AFRAME.THREE.LoopOnce);
+      this.action.clampWhenFinished = true;
+    }
+    this.action.play();
   },
 });
 
@@ -423,13 +445,18 @@ function spawnIceItems() {
 
     const iceEl = document.createElement('a-entity');
     iceEl.setAttribute('gltf-model', ICE_MODEL_URL);
+    // 로드는 해두되 재생은 안 함 — 글TF 기본 포즈가 이미 "온전한 얼음"이라 가만히 있으면
+    // 정지된 얼음처럼 보이고, breakLockedItem()에서 흔들리는 순간 playClip으로 재생한다.
+    iceEl.setAttribute('gltf-animation', 'clip: Ice_Break_1_5s; autoplay: false; loop: false');
     fitLoadedModel(iceEl, ICE_MODEL_TARGET_SIZE_M);
     wrapper.appendChild(iceEl);
 
     const mascotEl = document.createElement('a-entity');
     mascotEl.setAttribute('gltf-model', MASCOT_MODEL_URL);
     fitLoadedModel(mascotEl, MASCOT_MODEL_TARGET_SIZE_M);
-    mascotEl.setAttribute('visible', false); // 깨지기 전까지는 숨김
+    // 더 이상 숨기지 않는다 — 얼음 재질이 이미 반투명(alpha 0.26)이라, 스폰 때부터 Frozen_Idle을
+    // 반복재생해두면 얼음 속에서 장생이가 떨고 있는 게 비쳐 보인다.
+    mascotEl.setAttribute('gltf-animation', 'clip: Frozen_Idle; loop: true');
     wrapper.appendChild(mascotEl);
 
     const targetFx = createTargetFx();
@@ -614,37 +641,21 @@ function checkShake(x, y, now) {
   return reversals >= SHAKE_MIN_REVERSALS && spread <= SHAKE_MAX_SPREAD;
 }
 
-// --- 깨짐 이펙트 (placeholder: 그림 없이 도형 애니메이션으로 구현) ---
+// --- 깨짐 이펙트 ---
+// 얼음/장생이 둘 다 이제 실제 애니메이션 클립을 갖고 있어서(Ice_Break_1_5s, Frozen_Idle/Escape/
+// Celebrate_Dance/Collect_Pose), 아래 타이밍은 임의값이 아니라 그 클립들의 실제 길이 그대로다.
+// BREAK_EFFECT_MS는 이 연출과 무관하게 다른 곳(못 깬 나머지 얼음 정리, 장식 쓰레기 소멸)에서
+// 계속 쓰는 짧은 페이드용 상수라 그대로 둔다.
 const BREAK_EFFECT_MS = 800;
-const FINISH_DELAY_MS = 2000; // 마지막 얼음이 깨진 뒤 이만큼 더 지나서 완료 화면을 띄움
-const SHARD_COUNT = 7;
-
-function spawnShards(wrapper) {
-  for (let i = 0; i < SHARD_COUNT; i++) {
-    const shard = document.createElement('a-entity');
-    shard.setAttribute('geometry', 'primitive: plane; width: 0.06; height: 0.06');
-    // shader: flat — 기본 standard 셰이더(PBR, 조명/환경맵 계산 필요)보다 훨씬 가벼워서 얼음을 깰
-    // 때마다(최대 3회) 7개씩 새로 만드는 이 이펙트 조각들의 생성 비용을 줄인다. targetFx의 halo/dot
-    // 파티클도 같은 이유로 flat을 쓴다.
-    shard.setAttribute('material', 'color: #bfe8ff; shader: flat; opacity: 0.9; transparent: true; side: double');
-    shard.setAttribute('position', '0 0 0');
-
-    const angle = Math.random() * Math.PI * 2;
-    const flyDist = 0.25 + Math.random() * 0.25;
-    const toX = Math.cos(angle) * flyDist;
-    const toY = (Math.random() * 2 - 1) * flyDist;
-    const toZ = Math.sin(angle) * flyDist;
-
-    shard.setAttribute('animation__fly', `property: position; to: ${toX} ${toY} ${toZ}; dur: ${BREAK_EFFECT_MS}; easing: easeOutQuad`);
-    shard.setAttribute('animation__fade', `property: material.opacity; to: 0; dur: ${BREAK_EFFECT_MS}; easing: easeInQuad`);
-    shard.setAttribute(
-      'animation__spin',
-      `property: rotation; to: ${Math.random() * 360} ${Math.random() * 360} ${Math.random() * 360}; dur: ${BREAK_EFFECT_MS}; easing: linear`,
-    );
-
-    wrapper.appendChild(shard);
-  }
-}
+const ICE_SHATTER_MOMENT_MS = 500; // Ice_Break_1_5s에서 Ice_Intact가 사라지고 파편이 튀는 순간(글TF 키프레임 확인)
+const ESCAPE_CLIP_MS = 1033;
+const CELEBRATE_DANCE_CLIP_MS = 2033;
+const COLLECT_POSE_CLIP_MS = 1033;
+const MASCOT_FADE_MS = 500; // Collect_Pose 이후 사라지는 연출(클립엔 없어서 기존처럼 scale 페이드로 처리)
+// 얼음 하나당 연출 총 길이 — 완료 화면/클리어 영상은 이 시간이 다 지난 뒤에 떠야 마지막 장생이
+// 연출이 중간에 끊기지 않는다.
+const RESCUE_SEQUENCE_MS = ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS + CELEBRATE_DANCE_CLIP_MS + COLLECT_POSE_CLIP_MS + MASCOT_FADE_MS;
+const FINISH_DELAY_MS = 2000; // 마지막 연출이 다 끝난 뒤 이만큼 더 지나서 완료 화면을 띄움
 
 // 목표(RESCUE_COUNT)를 다 채우면, 스폰됐지만 아직 못 깬 나머지 얼음은 그냥 없앤다.
 function despawnRemainingIce() {
@@ -667,24 +678,33 @@ function breakLockedItem() {
   lockedItem = null;
   onLockEnd();
 
-  item.iceEl.setAttribute('visible', false);
-  spawnShards(item.el);
+  // 얼음 자체가 스스로 깨진다(균열 -> 파편 흩어짐, 1.5초) — 파편을 따로 만들 필요 없음.
+  item.iceEl.components['gltf-animation'].playClip('Ice_Break_1_5s', { loop: false });
 
-  item.mascotEl.setAttribute('visible', true);
-  item.mascotEl.setAttribute(
-    'animation__escape',
-    `property: position; to: 0 0.6 0; dur: ${BREAK_EFFECT_MS}; easing: easeOutQuad`,
+  // 장생이는 Frozen_Idle을 계속 반복 중이었으니, 얼음이 실제로 터지는 순간(ICE_SHATTER_MOMENT_MS)에
+  // 맞춰 Escape로 갈아타고, 이어서 Celebrate_Dance -> Collect_Pose 순서로 넘어간다. Escape 클립
+  // 자체에 위로 튀어오르는 움직임이 이미 리깅돼 있어서(0.42m) 별도 position 트윈이 필요 없다.
+  const mascotAnim = item.mascotEl.components['gltf-animation'];
+  setTimeout(() => mascotAnim.playClip('Escape', { loop: false }), ICE_SHATTER_MOMENT_MS);
+  setTimeout(
+    () => mascotAnim.playClip('Celebrate_Dance', { loop: false }),
+    ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS,
   );
-  // gltf-model 엔티티는 A-Frame의 material 컴포넌트를 쓰지 않아 material.opacity 애니메이션이
-  // 안 먹는다(244/251줄 grab 피드백이 scale을 쓰는 것과 같은 이유) — 대신 scale을 0으로 줄여서 사라지게 한다.
-  item.mascotEl.setAttribute(
-    'animation__escape-fade',
-    `property: scale; to: 0.001 0.001 0.001; delay: ${Math.round(BREAK_EFFECT_MS * 0.4)}; dur: ${Math.round(BREAK_EFFECT_MS * 0.6)}; easing: easeInQuad`,
+  setTimeout(
+    () => mascotAnim.playClip('Collect_Pose', { loop: false }),
+    ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS + CELEBRATE_DANCE_CLIP_MS,
   );
+  // Collect_Pose까지 끝나면 클립에 없는 "사라지는" 연출만 기존처럼 scale 페이드로 처리한다.
+  setTimeout(() => {
+    item.mascotEl.setAttribute(
+      'animation__collected-fade',
+      `property: scale; to: 0.001 0.001 0.001; dur: ${MASCOT_FADE_MS}; easing: easeInQuad`,
+    );
+  }, ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS + CELEBRATE_DANCE_CLIP_MS + COLLECT_POSE_CLIP_MS);
 
   setTimeout(() => {
     item.el.remove();
-  }, BREAK_EFFECT_MS + 50);
+  }, RESCUE_SEQUENCE_MS + 50);
 
   rescuedCount++;
   updateTrashCountText();
@@ -698,10 +718,10 @@ function breakLockedItem() {
     GameClear.markCleared('trash');
     setTimeout(() => {
       trashFinishedEl.style.display = 'block';
-    }, BREAK_EFFECT_MS);
+    }, RESCUE_SEQUENCE_MS);
     setTimeout(() => {
       GameClear.playVideo(clearVideoEl, revealCompleteOverlay);
-    }, BREAK_EFFECT_MS + FINISH_DELAY_MS);
+    }, RESCUE_SEQUENCE_MS + FINISH_DELAY_MS);
   } else {
     SFX.play('ice_collect');
     trashHintEl.textContent = '다음 얼음을 찾아 다가가 보세요';

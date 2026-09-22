@@ -47,8 +47,8 @@ function onFound(target) {
 // 캐시에서 바로 읽어와 훨씬 빨리 준비된다. 어느 마커가 인식될지 여기선 모르므로 양쪽 게임
 // 자산을 다 대상으로 한다 — 실패해도 캐시 예열 목적일 뿐이라 그냥 무시한다.
 const PREFETCH_URLS = [
-  '../assets/models/Ice.glb',
-  '../assets/models/Jangsaengi.glb',
+  '../assets/models/Ice_Break.glb',
+  '../assets/models/Jangsaeng.glb',
   '../assets/models/Whale_Low.glb',
   '../assets/models/Branching_Coral.glb',
   '../assets/models/Mound_Coral.glb',
