@@ -97,14 +97,19 @@
       color: #4a7a9e;
     }
 
-    /* 퍼즐 모드: 화면 중앙 4x2 조각 그리드(못 모은 조각은 반투명) */
+    /* 퍼즐 모드: 조각 미리보기 그리드 — 화면 중앙 대신 상단 카드 아래에 배치해서 카메라 뷰
+       가운데를 가리지 않게 하고, 다른 패널(#top-panel/#bottom-panel)과 같은 카드 톤을 맞춘다. */
     #puzzle-hud {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      position: fixed; top: 190px; left: 50%; transform: translateX(-50%);
       z-index: 15;
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      background: rgba(247, 252, 255, 0.92);
+      border: 1px solid #deeef8;
+      border-radius: 18px;
+      padding: 10px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
     }
     .puzzle-slot {
-      width: 18vw; height: 18vw; max-width: 76px; max-height: 76px;
+      width: 16vw; height: 16vw; max-width: 64px; max-height: 64px;
       background-size: cover; background-position: center;
       border: 2px solid rgba(255,255,255,0.6); border-radius: 8px;
       opacity: 0.35; transition: opacity 0.3s;

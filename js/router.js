@@ -81,6 +81,10 @@
       // 상태이므로, 페이지 로드 직후엔 막혔던 BGM/내레이션 재생을 여기서 다시 시도한다.
       if (window.BGM) window.BGM.ensureStarted();
       if (window.Narration) window.Narration.retry();
+    } else if (data.type === 'ulsanAR:videoEnded') {
+      // 클리어 영상 재생 중 모바일 브라우저가 오디오 포커스를 가져가면서 끊겼을 수 있는
+      // BGM을 다시 튼다(assets/game-clear.js의 finish()가 보냄).
+      if (window.BGM) window.BGM.resume();
     }
   });
 

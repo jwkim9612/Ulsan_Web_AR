@@ -55,6 +55,13 @@
       videoEl.removeEventListener('ended', finish);
       videoEl.pause();
       videoEl.style.display = 'none';
+      // 영상이 소리를 내며 재생되는 동안 모바일 브라우저가 오디오 포커스를 가져가면서 셸의
+      // 메인 BGM이 끊길 수 있다. 이 페이지는 셸(app.html)의 #route-frame iframe 안에서 도는
+      // 별도 문서라 window.BGM에 직접 접근할 수 없어서, sfx.js의 navigate()와 같은 방식으로
+      // postMessage로 셸에 재개를 요청한다.
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: 'ulsanAR:videoEnded' }, location.origin);
+      }
       onEnded();
     };
 
