@@ -81,7 +81,7 @@ function showPuzzleFinished() {
 
 PIECE_NAMES.forEach((name, targetIndex) => {
   const slot = document.getElementById(`puzzle-slot-${targetIndex}`);
-  slot.style.backgroundImage = `url(${PIECE_IMAGES[targetIndex]})`;
+  slot.src = PIECE_IMAGES[targetIndex];
 });
 
 // --- 오브젝트 배치 및 거리/응시 판정 (ar-scene/trash.js의 스폰/판정 로직 참고) ---

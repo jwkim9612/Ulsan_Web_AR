@@ -97,21 +97,22 @@
       color: #4a7a9e;
     }
 
-    /* 퍼즐 모드: 조각 미리보기 그리드 — 화면 중앙 대신 상단 카드 아래에 배치해서 카메라 뷰
-       가운데를 가리지 않게 하고, 다른 패널(#top-panel/#bottom-panel)과 같은 카드 톤을 맞춘다. */
+    /* 퍼즐 모드: 조각 PNG들은 전부 같은 캔버스 크기 안에서 자기 위치에만 그림이 있고 나머지는
+       투명하게 만들어진 지그소 컷아웃이라(육안 확인함), 8장을 같은 위치에 겹쳐 쌓아두면 모을수록
+       완성 그림이 맞춰지는 것처럼 보인다 — 8칸으로 나눠 보여주는 그리드 대신 이 방식을 쓴다. */
     #puzzle-hud {
       position: fixed; top: 190px; left: 50%; transform: translateX(-50%);
       z-index: 15;
+      width: 40vw; height: 40vw; max-width: 160px; max-height: 160px;
       background: rgba(247, 252, 255, 0.92);
       border: 1px solid #deeef8;
       border-radius: 18px;
-      padding: 10px;
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+      overflow: hidden;
     }
     .puzzle-slot {
-      width: 16vw; height: 16vw; max-width: 64px; max-height: 64px;
-      background-size: cover; background-position: center;
-      border: 2px solid rgba(255,255,255,0.6); border-radius: 8px;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
       opacity: 0.35; transition: opacity 0.3s;
     }
     .puzzle-slot.collected { opacity: 1; animation: puzzle-collect-pop 0.5s ease-out; }
@@ -278,14 +279,14 @@
   </div>
 
   <div id="puzzle-hud">
-    <div class="puzzle-slot" id="puzzle-slot-0"></div>
-    <div class="puzzle-slot" id="puzzle-slot-1"></div>
-    <div class="puzzle-slot" id="puzzle-slot-2"></div>
-    <div class="puzzle-slot" id="puzzle-slot-3"></div>
-    <div class="puzzle-slot" id="puzzle-slot-4"></div>
-    <div class="puzzle-slot" id="puzzle-slot-5"></div>
-    <div class="puzzle-slot" id="puzzle-slot-6"></div>
-    <div class="puzzle-slot" id="puzzle-slot-7"></div>
+    <img class="puzzle-slot" id="puzzle-slot-0" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-1" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-2" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-3" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-4" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-5" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-6" alt="" />
+    <img class="puzzle-slot" id="puzzle-slot-7" alt="" />
   </div>
   <img id="puzzle-finished" src="" alt="완성" />
   <div id="puzzle-hint"></div>

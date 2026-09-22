@@ -392,30 +392,47 @@ function fitLoadedModel(el, targetSizeM) {
 }
 
 // 타겟팅 표시: gltf-model(iceEl)은 material 컴포넌트를 안 써서 색을 바꿀 수 없으므로, 그림/텍스처
-// 없이 기본 도형만으로 얼음 주위를 도는 파티클 + 은은한 발광 구체를 만들어 "지금 이 얼음이
-// 타겟됨"을 표시한다. 평소엔 숨겨뒀다가 타겟팅되는 순간 visible: true로 켠다.
-const TARGET_FX_PARTICLE_COUNT = 4;
-const TARGET_FX_ORBIT_RADIUS_M = 0.32;
-const TARGET_FX_COLOR = '#7ee8ff';
+// 없이 기본 도형만으로 얼음 주변에 반짝이는 별 모양 파티클을 흩뿌려 "지금 이 얼음이 타겟됨"을
+// 표시한다. 평소엔 숨겨뒀다가 타겟팅되는 순간 visible: true로 켠다.
+const TARGET_FX_SPARKLE_COUNT = 6;
+const TARGET_FX_SPARKLE_RADIUS_M = 0.3;
+const TARGET_FX_COLOR = '#eafcff';
+
+// 십자로 겹친 얇은 사각형 2장 = 별 모양 반짝임.
+function createSparkle() {
+  const sparkle = document.createElement('a-entity');
+  const bar1 = document.createElement('a-entity');
+  bar1.setAttribute('geometry', 'primitive: plane; width: 0.05; height: 0.006');
+  bar1.setAttribute('material', `color: ${TARGET_FX_COLOR}; shader: flat; opacity: 0.95; transparent: true; side: double`);
+  sparkle.appendChild(bar1);
+  const bar2 = document.createElement('a-entity');
+  bar2.setAttribute('geometry', 'primitive: plane; width: 0.006; height: 0.05');
+  bar2.setAttribute('material', `color: ${TARGET_FX_COLOR}; shader: flat; opacity: 0.95; transparent: true; side: double`);
+  sparkle.appendChild(bar2);
+  return sparkle;
+}
 
 function createTargetFx() {
   const fx = document.createElement('a-entity');
   fx.setAttribute('visible', false);
-  fx.setAttribute('animation__spin', 'property: rotation; to: 0 360 0; loop: true; dur: 2200; easing: linear');
 
-  const halo = document.createElement('a-entity');
-  halo.setAttribute('geometry', 'primitive: sphere; radius: 0.28; segmentsWidth: 12; segmentsHeight: 8');
-  halo.setAttribute('material', `color: ${TARGET_FX_COLOR}; shader: flat; opacity: 0.16; transparent: true; side: double`);
-  halo.setAttribute('animation__pulse', 'property: scale; from: 0.9 0.9 0.9; to: 1.15 1.15 1.15; dir: alternate; loop: true; dur: 900; easing: easeInOutSine');
-  fx.appendChild(halo);
+  for (let i = 0; i < TARGET_FX_SPARKLE_COUNT; i++) {
+    const sparkle = createSparkle();
+    // 얼음 표면 주변 구 껍질 위에 무작위로 흩뿌린다(고리 모양으로 도는 대신 입체적으로 반짝임).
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos((Math.random() * 2) - 1);
+    const r = TARGET_FX_SPARKLE_RADIUS_M * (0.75 + Math.random() * 0.25);
+    sparkle.setAttribute('position', `${r * Math.sin(phi) * Math.cos(theta)} ${r * Math.cos(phi)} ${r * Math.sin(phi) * Math.sin(theta)}`);
+    sparkle.setAttribute('rotation', `${Math.random() * 360} ${Math.random() * 360} ${Math.random() * 360}`);
 
-  for (let p = 0; p < TARGET_FX_PARTICLE_COUNT; p++) {
-    const angle = (p / TARGET_FX_PARTICLE_COUNT) * Math.PI * 2;
-    const dot = document.createElement('a-entity');
-    dot.setAttribute('geometry', 'primitive: sphere; radius: 0.025; segmentsWidth: 8; segmentsHeight: 6');
-    dot.setAttribute('material', `color: ${TARGET_FX_COLOR}; shader: flat; opacity: 0.9; transparent: true`);
-    dot.setAttribute('position', `${Math.cos(angle) * TARGET_FX_ORBIT_RADIUS_M} 0 ${Math.sin(angle) * TARGET_FX_ORBIT_RADIUS_M}`);
-    fx.appendChild(dot);
+    // 서로 다른 길이/지연으로 반짝여서 한꺼번에 켜졌다 꺼지는 대신 각자 따로 깜빡이게 한다.
+    const dur = 700 + Math.random() * 600;
+    const delay = Math.random() * 1200;
+    sparkle.setAttribute(
+      'animation__twinkle',
+      `property: scale; from: 0.001 0.001 0.001; to: 1 1 1; dir: alternate; loop: true; dur: ${dur}; delay: ${delay}; easing: easeInOutSine`,
+    );
+    fx.appendChild(sparkle);
   }
 
   return fx;
@@ -442,6 +459,10 @@ function spawnIceItems() {
 
     const wrapper = document.createElement('a-entity');
     wrapper.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
+    // 스폰 순간 사용자(카메라) 쪽을 보게 — puzzle.js의 faceCamera와 같은 원리(lookAt은 로컬
+    // +Z축을 타겟으로 돌림). 장생이는 이 wrapper의 자식이라 얼음과 함께 같이 돌아간다.
+    // 스폰 때 한 번만 계산하고, 이후 사용자가 움직여도 다시 돌리지 않는다.
+    wrapper.object3D.lookAt(origin.x, origin.y, origin.z);
 
     const iceEl = document.createElement('a-entity');
     iceEl.setAttribute('gltf-model', ICE_MODEL_URL);
