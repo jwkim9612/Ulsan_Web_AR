@@ -113,7 +113,11 @@
       position: absolute; inset: 0;
       width: 100%; height: 100%;
       object-fit: cover;
-      opacity: 0.35; transition: opacity 0.3s;
+      opacity: 0.35; transition: opacity 0.3s, transform 0.3s;
+      /* 조각끼리 살짝 틈이 보이도록 캔버스 중앙(transform-origin 기본값) 쪽으로 소폭 축소 —
+         모든 조각이 같은 캔버스/위치를 공유해서, 중앙에서 먼 조각일수록 더 당겨져 자연스럽게
+         벌어져 보인다. */
+      transform: scale(0.94);
     }
     .puzzle-slot.collected { opacity: 1; animation: puzzle-collect-pop 0.5s ease-out; }
 
