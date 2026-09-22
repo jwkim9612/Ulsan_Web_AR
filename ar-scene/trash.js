@@ -15,7 +15,8 @@
 //
 // 이 외에 장식용으로 고래 3마리(`assets/models/Whale_Low.glb`)를 얼음보다 멀찍이 흩뿌려두는데,
 // 이쪽은 상호작용이 전혀 없고 그냥 Swimming 애니메이션(gltf-animation 컴포넌트)을 재생하며
-// 완만하게 위아래로 흔들리기만 한다.
+// 완만하게 위아래로 흔들리기만 한다. 산호(정지)와 해초(내장 Sway_Loop_4s 애니메이션) 4종도
+// 장식으로 바닥 근처에 흩뿌려두는데, 이것도 고래와 마찬가지로 상호작용이 전혀 없다.
 
 const backBtn = document.getElementById('back-btn');
 const trashRoot = document.getElementById('trash-root');
@@ -154,6 +155,35 @@ const WHALE_SPAWN_MIN_M = 2.0;
 const WHALE_SPAWN_MAX_M = 4.0; // 얼음보다 멀찍이 둬서 상호작용 대상과 안 헷갈리게 함
 const WHALE_HEIGHT_OFFSET_M = 0.9;
 
+// --- 배경 장식용 산호/해초(상호작용 없음). 산호는 완전히 고정, 해초만 내장된
+// Sway_Loop_4s 클립으로 살랑거린다. ---
+const CORAL_BRANCHING_MODEL_URL = '#coral-branching-model-asset';
+const CORAL_MOUND_MODEL_URL = '#coral-mound-model-asset';
+const SEAGRASS_MODEL_URL = '#seagrass-model-asset';
+const WAKAME_MODEL_URL = '#wakame-model-asset';
+
+// Seagrass.glb는 클립이 2개(Sway_Loop_4s, Sway_Loop_4s.001 — 블렌더 익스포트 중복 추정)라
+// mesh.animations[0]에 기대면 둘 중 뭐가 걸릴지 불확실해서 이름으로 명시 지정한다.
+const REEF_SWAY_CLIP = 'Sway_Loop_4s';
+
+// { url, targetSizeM, clip } — clip 있으면 gltf-animation 부착, 없으면(산호) 완전 정적.
+// 목표 크기는 실측 기준 없는 눈대중 값이라 실기기 확인 후 조정 필요.
+const REEF_MODELS = [
+  { url: CORAL_BRANCHING_MODEL_URL, targetSizeM: 0.4, clip: null },
+  { url: CORAL_MOUND_MODEL_URL, targetSizeM: 0.3, clip: null },
+  { url: SEAGRASS_MODEL_URL, targetSizeM: 0.5, clip: REEF_SWAY_CLIP },
+  { url: WAKAME_MODEL_URL, targetSizeM: 0.6, clip: REEF_SWAY_CLIP },
+];
+
+const REEF_COUNT = 8; // 슬롯마다 REEF_MODELS 중 무작위 1개 -> 평균 산호/해초 각 4개씩.
+                       // 텍스처 없는 단일메시라 고래/얼음에 더해도 모바일 부담 적을 것으로 판단.
+const REEF_SPAWN_MIN_M = 1.0;
+const REEF_SPAWN_MAX_M = 3.8; // 얼음 링(1.2~3.0m)/고래 링(2.0~4.0m)과 반경은 겹치지만
+                               // REEF_HEIGHT_OFFSET_M으로 눈높이보다 한참 아래 배치돼 수직 분리된다.
+const REEF_HEIGHT_OFFSET_M = -1.1; // 바닥 감지가 없어서, 카메라 시작 위치(가슴~눈높이로 들고
+                                    // 있다고 가정)보다 이만큼 아래를 "바다 바닥"으로 근사한다.
+                                    // 오차가 클 수 있어 실기기 테스트 후 조정 필요.
+
 // glTF 모델 안에 내보내진 애니메이션 클립을 THREE.AnimationMixer로 재생하는 범용 컴포넌트.
 // 8th Wall 전용 A-Frame 빌드(vendor/8frame-1.5.0.min.js)에는 aframe-extras의 animation-mixer가
 // 없어서 직접 만듦 — tick()에서 매 프레임 mixer를 갱신해야 실제로 재생된다.
@@ -202,6 +232,41 @@ function spawnDecorativeWhales() {
     whaleEl.setAttribute('gltf-animation', 'clip: Swimming');
     fitLoadedModel(whaleEl, WHALE_TARGET_SIZE_M);
     wrapper.appendChild(whaleEl);
+
+    trashRoot.appendChild(wrapper);
+  }
+}
+
+// 산호/해초도 장식용 고래와 같은 섹터 배치 구조를 쓰되, 슬롯마다 REEF_MODELS 중 하나를
+// 무작위로 골라서 흩뿌린다. 바닥에 뿌리내린 느낌이라 고래처럼 떠다니는 bob/turn 애니메이션은
+// 주지 않고, 반복 사용되는 모델이 2+2종뿐이라 너무 균일해 보이지 않도록 개체마다 스케일을
+// ±15% 지터한다(fitLoadedModel이 이미 적용한 고정 목표 크기 위에 wrapper 스케일로 곱해짐 —
+// 서로 다른 계층이라 충돌 없음).
+function spawnDecorativeReef() {
+  const pose = getCameraPose();
+  const origin = pose ? pose.camPos : { x: 0, y: 0, z: 0 };
+
+  const sector = (Math.PI * 2) / REEF_COUNT;
+  for (let i = 0; i < REEF_COUNT; i++) {
+    const model = REEF_MODELS[Math.floor(Math.random() * REEF_MODELS.length)];
+
+    const radius = REEF_SPAWN_MIN_M + Math.random() * (REEF_SPAWN_MAX_M - REEF_SPAWN_MIN_M);
+    const theta = sector * i + Math.random() * sector;
+    const x = origin.x + radius * Math.cos(theta);
+    const z = origin.z + radius * Math.sin(theta);
+    const y = origin.y + REEF_HEIGHT_OFFSET_M + (Math.random() * 0.4 - 0.2);
+
+    const wrapper = document.createElement('a-entity');
+    wrapper.setAttribute('position', `${x} ${y} ${z}`);
+    wrapper.setAttribute('rotation', `0 ${Math.random() * 360} 0`);
+    const jitter = 0.85 + Math.random() * 0.3;
+    wrapper.setAttribute('scale', `${jitter} ${jitter} ${jitter}`);
+
+    const reefEl = document.createElement('a-entity');
+    reefEl.setAttribute('gltf-model', model.url);
+    if (model.clip) reefEl.setAttribute('gltf-animation', `clip: ${model.clip}`);
+    fitLoadedModel(reefEl, model.targetSizeM);
+    wrapper.appendChild(reefEl);
 
     trashRoot.appendChild(wrapper);
   }
@@ -764,6 +829,7 @@ const onxrloaded = () => {
   warmupHands();
   spawnIceItems();
   spawnDecorativeWhales();
+  spawnDecorativeReef();
 };
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);
