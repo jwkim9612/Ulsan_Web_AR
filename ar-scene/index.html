@@ -114,11 +114,22 @@
       width: 100%; height: 100%;
       object-fit: cover;
       opacity: 0.35; transition: opacity 0.3s, transform 0.3s;
-      /* 조각끼리 살짝 틈이 보이도록 캔버스 중앙(transform-origin 기본값) 쪽으로 소폭 축소 —
-         모든 조각이 같은 캔버스/위치를 공유해서, 중앙에서 먼 조각일수록 더 당겨져 자연스럽게
-         벌어져 보인다. */
-      transform: scale(0.94);
+      /* 조각끼리 살짝 틈이 보이도록 각 조각 자기 중심 쪽으로 소폭 축소한다. transform-origin을
+         기본값(캔버스 중앙)에 그대로 두면 8장이 전부 같은 축으로 줄어들어 서로의 상대 위치는
+         하나도 안 바뀌고(합성 결과가 그냥 통째로 작아지기만 함) 바깥 여백만 하얗게 드러나는
+         버그가 났었다 — 조각마다 자기 그림이 있는 위치(transform-origin)가 달라야 서로 벌어져
+         보인다. 좌표값은 p_1~p_8.png의 불투명 픽셀 바운딩박스 중심을 실측해서 넣은 값 —
+         조각 이미지를 다시 만들면 이 값들도 다시 재야 한다. */
+      transform: scale(0.9);
     }
+    #puzzle-slot-0 { transform-origin: 14.6% 27.1%; }
+    #puzzle-slot-1 { transform-origin: 37.4% 24.9%; }
+    #puzzle-slot-2 { transform-origin: 62.5% 27.1%; }
+    #puzzle-slot-3 { transform-origin: 87.4% 24.9%; }
+    #puzzle-slot-4 { transform-origin: 12.4% 74.9%; }
+    #puzzle-slot-5 { transform-origin: 37.5% 72.8%; }
+    #puzzle-slot-6 { transform-origin: 62.4% 74.9%; }
+    #puzzle-slot-7 { transform-origin: 85.3% 72.8%; }
     .puzzle-slot.collected { opacity: 1; animation: puzzle-collect-pop 0.5s ease-out; }
 
     @keyframes puzzle-collect-pop {
