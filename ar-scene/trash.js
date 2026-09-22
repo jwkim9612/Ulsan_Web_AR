@@ -17,6 +17,10 @@
 // 이쪽은 상호작용이 전혀 없고 그냥 Swimming 애니메이션(gltf-animation 컴포넌트)을 재생하며
 // 완만하게 위아래로 흔들리기만 한다. 산호(정지)와 해초(내장 Sway_Loop_4s 애니메이션) 4종도
 // 장식으로 바닥 근처에 흩뿌려두는데, 이것도 고래와 마찬가지로 상호작용이 전혀 없다.
+// 쓰레기(캔/PET병/컵) 3종은 6개(종류당 2개) 떠다니는 장식으로 두되, 얼음을 하나 깰 때마다
+// 2개씩 사라지게 해서 얼음 3개를 다 깨면 쓰레기도 정확히 다 없어진다(despawnTrashDecorBatch).
+// 화면 전체에는 CSS만으로 수중 톤 오버레이(#underwater-filter, trash.html)를 씌워뒀는데,
+// 실제 카메라 프레임(World Tracking/MediaPipe Hands가 쓰는 원본 픽셀)에는 영향이 없다.
 
 const backBtn = document.getElementById('back-btn');
 const trashRoot = document.getElementById('trash-root');
@@ -184,6 +188,22 @@ const REEF_HEIGHT_OFFSET_M = -1.1; // 바닥 감지가 없어서, 카메라 시�
                                     // 있다고 가정)보다 이만큼 아래를 "바다 바닥"으로 근사한다.
                                     // 오차가 클 수 있어 실기기 테스트 후 조정 필요.
 
+// --- 장식용 쓰레기 3종(캔/PET병/컵), 종류당 2개씩 총 6개. 장식이지만 산호/해초와 달리
+// 게임 진행(얼음 깨기)에 연동해서 사라진다 — 얼음 하나 깰 때마다 2개씩 없어져서, 얼음
+// RESCUE_COUNT(3)개를 다 깨면 쓰레기 6개도 정확히 다 사라진다. ---
+const TRASH_DECOR_MODELS = [
+  { url: '#trash-can-model-asset', targetSizeM: 0.22 },
+  { url: '#trash-bottle-model-asset', targetSizeM: 0.25 },
+  { url: '#trash-cup-model-asset', targetSizeM: 0.18 },
+];
+const TRASH_DECOR_PER_RESCUE = 2; // 얼음 1개 깰 때마다 사라지는 개수
+const TRASH_DECOR_COUNT = TRASH_DECOR_PER_RESCUE * RESCUE_COUNT; // 항상 정확히 다 없어지도록 RESCUE_COUNT에서 도출(하드코딩 6 대신)
+const TRASH_DECOR_SPAWN_MIN_M = 1.3;
+const TRASH_DECOR_SPAWN_MAX_M = 3.2;
+const TRASH_DECOR_HEIGHT_OFFSET_M = 0.9; // 고래처럼 눈높이 근처 수중에 떠 있는 느낌
+
+let trashDecorItems = []; // { el } — pop()한 순서대로 사라짐(스폰 시 미리 섞어둠)
+
 // glTF 모델 안에 내보내진 애니메이션 클립을 THREE.AnimationMixer로 재생하는 범용 컴포넌트.
 // 8th Wall 전용 A-Frame 빌드(vendor/8frame-1.5.0.min.js)에는 aframe-extras의 animation-mixer가
 // 없어서 직접 만듦 — tick()에서 매 프레임 mixer를 갱신해야 실제로 재생된다.
@@ -269,6 +289,59 @@ function spawnDecorativeReef() {
     wrapper.appendChild(reefEl);
 
     trashRoot.appendChild(wrapper);
+  }
+}
+
+// 3종을 2개씩 채운 풀을 셔플해서, 배치 위치와 "얼음 깰 때마다 사라지는 순서"를 둘 다
+// 무작위로 만든다. 산호/해초와 달리 물속을 떠다니는 쓰레기라 고정하지 않고, 고래처럼
+// 완만한 bob(상하) + 표류하는 느낌의 느린 tumble(회전) 애니메이션을 준다.
+function spawnTrashDecor() {
+  const pose = getCameraPose();
+  const origin = pose ? pose.camPos : { x: 0, y: 0, z: 0 };
+
+  const pool = [];
+  TRASH_DECOR_MODELS.forEach((m) => { pool.push(m); pool.push(m); });
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  const sector = (Math.PI * 2) / TRASH_DECOR_COUNT;
+  pool.forEach((model, i) => {
+    const radius = TRASH_DECOR_SPAWN_MIN_M + Math.random() * (TRASH_DECOR_SPAWN_MAX_M - TRASH_DECOR_SPAWN_MIN_M);
+    const theta = sector * i + Math.random() * sector;
+    const x = origin.x + radius * Math.cos(theta);
+    const z = origin.z + radius * Math.sin(theta);
+    const y = origin.y + TRASH_DECOR_HEIGHT_OFFSET_M + (Math.random() * 0.6 - 0.3);
+
+    const wrapper = document.createElement('a-entity');
+    wrapper.setAttribute('position', `${x} ${y} ${z}`);
+    wrapper.setAttribute('rotation', `${Math.random() * 360} ${Math.random() * 360} ${Math.random() * 360}`);
+
+    const bobTo = `${x} ${y + 0.2} ${z}`;
+    wrapper.setAttribute('animation__bob', `property: position; to: ${bobTo}; dir: alternate; loop: true; dur: ${2000 + Math.random() * 1500}; easing: easeInOutSine`);
+    wrapper.setAttribute('animation__tumble', `property: rotation; to: ${Math.random() * 360} ${Math.random() * 360 + 360} ${Math.random() * 360}; loop: true; dur: ${8000 + Math.random() * 4000}; easing: linear`);
+
+    const trashEl = document.createElement('a-entity');
+    trashEl.setAttribute('gltf-model', model.url);
+    fitLoadedModel(trashEl, model.targetSizeM);
+    wrapper.appendChild(trashEl);
+
+    trashRoot.appendChild(wrapper);
+    trashDecorItems.push({ el: wrapper });
+  });
+}
+
+// 얼음을 하나 깰 때마다 breakLockedItem()에서 호출 — 기존 despawnRemainingIce와 같은
+// "scale을 0으로 줄이는 애니메이션 후 remove()" 패턴으로 count개를 지운다.
+function despawnTrashDecorBatch(count) {
+  for (let i = 0; i < count && trashDecorItems.length > 0; i++) {
+    const item = trashDecorItems.pop();
+    item.el.setAttribute(
+      'animation__despawn',
+      `property: scale; to: 0.001 0.001 0.001; dur: ${BREAK_EFFECT_MS}; easing: easeInQuad`,
+    );
+    setTimeout(() => item.el.remove(), BREAK_EFFECT_MS + 50);
   }
 }
 
@@ -615,6 +688,7 @@ function breakLockedItem() {
 
   rescuedCount++;
   updateTrashCountText();
+  despawnTrashDecorBatch(TRASH_DECOR_PER_RESCUE);
 
   if (rescuedCount === RESCUE_COUNT) {
     despawnRemainingIce();
@@ -830,6 +904,7 @@ const onxrloaded = () => {
   spawnIceItems();
   spawnDecorativeWhales();
   spawnDecorativeReef();
+  spawnTrashDecor();
 };
 
 window.XR8 ? onxrloaded() : window.addEventListener('xrloaded', onxrloaded);

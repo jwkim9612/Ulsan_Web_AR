@@ -30,6 +30,15 @@
       z-index: 5; pointer-events: none;
     }
 
+    /* 카메라 화면 전체에 수중 톤을 씌우는 순수 CSS 오버레이 — World Tracking/MediaPipe
+       Hands가 보는 실제 카메라 픽셀에는 전혀 영향 없음(DOM 위에 그려지는 시각 효과일 뿐).
+       hand-canvas(5)보다 아래, a-scene 카메라 캔버스보다는 위에 오도록 층을 나눈다. */
+    #underwater-filter {
+      position: fixed; inset: 0; z-index: 4; pointer-events: none;
+      background: linear-gradient(180deg, rgba(6,70,100,0.30) 0%, rgba(4,110,130,0.16) 45%, rgba(2,40,70,0.38) 100%);
+      mix-blend-mode: multiply;
+    }
+
     /* 상단 카드(뒤로가기+로고/타이틀+현재 모드) + 상태 뱃지 — camera-intro.html/scan.html과
        동일한 톤. 실제 폭/위치 계산이 필요해서 flex-column인 #top-chrome 안에 쌓는다. */
     #top-chrome {
@@ -248,11 +257,16 @@
       <a-asset-item id="coral-mound-model-asset" src="../assets/models/Mound_Coral.glb"></a-asset-item>
       <a-asset-item id="seagrass-model-asset" src="../assets/models/Seagrass.glb"></a-asset-item>
       <a-asset-item id="wakame-model-asset" src="../assets/models/Wakame.glb"></a-asset-item>
+      <a-asset-item id="trash-can-model-asset" src="../assets/models/Crushed_Can.glb"></a-asset-item>
+      <a-asset-item id="trash-bottle-model-asset" src="../assets/models/Crushed_PET_Bottle.glb"></a-asset-item>
+      <a-asset-item id="trash-cup-model-asset" src="../assets/models/Discarded_Plastic_Cup.glb"></a-asset-item>
     </a-assets>
     <a-camera position="0 0 0"></a-camera>
     <a-light type="ambient" intensity="1"></a-light>
     <a-entity id="trash-root"></a-entity>
   </a-scene>
+
+  <div id="underwater-filter"></div>
 
   <canvas id="hand-canvas"></canvas>
 
