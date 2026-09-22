@@ -97,14 +97,14 @@
       color: #4a7a9e;
     }
 
-    /* 퍼즐 모드: 화면 중앙 2x2 조각 그리드(못 모은 조각은 반투명) */
+    /* 퍼즐 모드: 화면 중앙 4x2 조각 그리드(못 모은 조각은 반투명) */
     #puzzle-hud {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
       z-index: 15;
-      display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
     }
     .puzzle-slot {
-      width: 28vw; height: 28vw; max-width: 130px; max-height: 130px;
+      width: 18vw; height: 18vw; max-width: 76px; max-height: 76px;
       background-size: cover; background-position: center;
       border: 2px solid rgba(255,255,255,0.6); border-radius: 8px;
       opacity: 0.35; transition: opacity 0.3s;
@@ -246,6 +246,10 @@
       <img id="piece-1-asset" src="../assets/images/p_2.png" crossorigin="anonymous">
       <img id="piece-2-asset" src="../assets/images/p_3.png" crossorigin="anonymous">
       <img id="piece-3-asset" src="../assets/images/p_4.png" crossorigin="anonymous">
+      <img id="piece-4-asset" src="../assets/images/p_5.png" crossorigin="anonymous">
+      <img id="piece-5-asset" src="../assets/images/p_6.png" crossorigin="anonymous">
+      <img id="piece-6-asset" src="../assets/images/p_7.png" crossorigin="anonymous">
+      <img id="piece-7-asset" src="../assets/images/p_8.png" crossorigin="anonymous">
     </a-assets>
     <a-camera position="0 0 0"></a-camera>
     <a-light type="ambient" intensity="1"></a-light>
@@ -273,6 +277,10 @@
     <div class="puzzle-slot" id="puzzle-slot-1"></div>
     <div class="puzzle-slot" id="puzzle-slot-2"></div>
     <div class="puzzle-slot" id="puzzle-slot-3"></div>
+    <div class="puzzle-slot" id="puzzle-slot-4"></div>
+    <div class="puzzle-slot" id="puzzle-slot-5"></div>
+    <div class="puzzle-slot" id="puzzle-slot-6"></div>
+    <div class="puzzle-slot" id="puzzle-slot-7"></div>
   </div>
   <img id="puzzle-finished" src="" alt="완성" />
   <div id="puzzle-hint"></div>
