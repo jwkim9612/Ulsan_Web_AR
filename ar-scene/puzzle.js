@@ -1,6 +1,6 @@
 // AR Scene: 퍼즐 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를 추적해서 사용자 주변에
 // 퍼즐 조각 오브젝트 8개(조각 이미지를 입힌 평면)를 배치하고, 사용자가 실제로 일정 거리 안까지
-// 다가가서 그 오브젝트 쪽을 바라본 채로 DWELL_MS(0.6초)를 유지하면 조각을 채운다. 화면 중앙 4x2
+// 다가가서 그 오브젝트 쪽을 바라본 채로 DWELL_MS(1초)를 유지하면 조각을 채운다. 화면 중앙 4x2
 // 그리드가 하나씩 채워지고, 8개를 다 모으면 완성 이미지가 화면에 표시된다.
 // 고래구조 모드도 동일하게 월드 트래킹을 쓰지만, 페이지는 여전히 분리되어 있다(trash.html).
 
@@ -93,10 +93,8 @@ const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위�
 const SPAWN_HEIGHT_VARIATION_M = 0.3; // 위 오프셋 기준 위아래로 이만큼까지 무작위 높낮이
 const PIECE_SIZE_M = 0.8; // 조각 평면 한 변 길이(실측 미터)
 const COLLECT_DISTANCE_M = 4.0; // 이 거리 안이면서 아래 각도 조건도 만족해야 조각을 채움
-const COLLECT_GAZE_DOT_THRESHOLD = 0.75; // 화면 중앙 쪽으로 바라보고 있어야 함(약 41도 이내)
-const DWELL_MS = 600; // 거리+응시 조건을 이만큼 유지해야 조각을 채움
-// 손떨림/SLAM 지터로 조건이 잠깐 끊겨도 이 시간 안에 다시 만족하면 유지 타이머를 리셋하지 않음.
-const GAZE_GRACE_MS = 300;
+const COLLECT_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
+const DWELL_MS = 1000; // 거리+응시 조건을 이만큼 끊기지 않고 유지해야 조각을 채움
 
 // 단안 카메라 SLAM은 실측 스케일 추정이 트래킹 도중에도 계속 재조정될 수 있어서, 스폰 때는
 // SPAWN_MAX_M 안에 있던 조각이 나중에 스케일이 커지는 쪽으로 재추정되면 실제로 훨씬 멀게
@@ -104,7 +102,7 @@ const GAZE_GRACE_MS = 300;
 // 기준으로 가까이 다시 배치해서 너무 멀리 나가는 걸 막는다.
 const MAX_DRIFT_DISTANCE_M = SPAWN_MAX_M * 2;
 
-let puzzleTargets = []; // { el, worldPos, index, collected, gazeStartedAt, lastGazeAt }
+let puzzleTargets = []; // { el, worldPos, index, collected, gazeStartedAt }
 
 // TODO: plane placeholder를 실제 조각 3D 모델(glb 등)로 교체 가능.
 //
@@ -133,7 +131,7 @@ function spawnPuzzleTargets() {
     puzzleTargetsRoot.appendChild(el);
 
     puzzleTargets.push({
-      el, worldPos, index, collected: false, gazeStartedAt: null, lastGazeAt: 0,
+      el, worldPos, index, collected: false, gazeStartedAt: null,
     });
   });
 
@@ -197,12 +195,10 @@ function checkProximity(camPos, camRot) {
       gazing = toTargetScratch.dot(forward) >= COLLECT_GAZE_DOT_THRESHOLD;
     }
 
-    if (gazing) {
-      t.lastGazeAt = now;
-    } else if (t.gazeStartedAt !== null && now - t.lastGazeAt > GAZE_GRACE_MS) {
+    if (!gazing) {
       t.gazeStartedAt = null;
+      return;
     }
-    if (!gazing && t.gazeStartedAt === null) return;
     if (t.gazeStartedAt === null) {
       t.gazeStartedAt = now;
       return;
