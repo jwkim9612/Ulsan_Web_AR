@@ -150,13 +150,13 @@ const ICE_MODEL_URL = '#ice-model-asset';
 const ICE_MODEL_TARGET_SIZE_M = 0.45; // 모델의 가장 긴 변이 대략 이 크기가 되도록 자동 스케일
 
 const MASCOT_MODEL_URL = '#mascot-model-asset';
-const MASCOT_MODEL_TARGET_SIZE_M = 0.2; // 얼음(0.35m)보다 한 단계 작게 — 얼음 속에 들어있는 느낌
+const MASCOT_MODEL_TARGET_SIZE_M = 0.3; // 얼음(0.45m)보다 작게 — 얼음 속에 들어있는 느낌(렌더 기준 약 0.3m 높이, 얼음 약 0.43m)
 
 // --- 배경 장식용 고래(상호작용 없음, 그냥 주변에서 헤엄치는 것처럼 보이기만 함) ---
 const WHALE_MODEL_URL = '#whale-model-asset';
 // fitLoadedModel의 스킨드 메시 측정 버그를 고친 뒤 기준으로, 이전 화면상 크기(~1.65m)의 절반(~0.8m)이
-// 되는 값. 회전된 AABB로 재기 때문에 실제 렌더 크기는 이 값보다 조금 작게 나온다(1.05 -> 약 0.82m).
-const WHALE_TARGET_SIZE_M = 1.05;
+// 되는 값에서 살짝 더 줄임. 회전된 AABB로 재기 때문에 실제 렌더 크기는 이 값보다 조금 작게 나온다(0.9 -> 약 0.70m).
+const WHALE_TARGET_SIZE_M = 0.9;
 const WHALE_COUNT = 3;
 const WHALE_SPAWN_MIN_M = 2.0;
 const WHALE_SPAWN_MAX_M = 4.0; // 얼음보다 멀찍이 둬서 상호작용 대상과 안 헷갈리게 함
