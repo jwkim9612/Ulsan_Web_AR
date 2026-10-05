@@ -154,7 +154,9 @@ const MASCOT_MODEL_TARGET_SIZE_M = 0.2; // 얼음(0.35m)보다 한 단계 작게
 
 // --- 배경 장식용 고래(상호작용 없음, 그냥 주변에서 헤엄치는 것처럼 보이기만 함) ---
 const WHALE_MODEL_URL = '#whale-model-asset';
-const WHALE_TARGET_SIZE_M = 0.9;
+// fitLoadedModel의 스킨드 메시 측정 버그를 고친 뒤 기준으로, 이전 화면상 크기(~1.65m)의 절반(~0.8m)이
+// 되는 값. 회전된 AABB로 재기 때문에 실제 렌더 크기는 이 값보다 조금 작게 나온다(1.05 -> 약 0.82m).
+const WHALE_TARGET_SIZE_M = 1.05;
 const WHALE_COUNT = 3;
 const WHALE_SPAWN_MIN_M = 2.0;
 const WHALE_SPAWN_MAX_M = 4.0; // 얼음보다 멀찍이 둬서 상호작용 대상과 안 헷갈리게 함
@@ -372,6 +374,14 @@ function fitLoadedModel(el, targetSizeM) {
   el.addEventListener('model-loaded', (e) => {
     const mesh = (e.detail && e.detail.model) || el.getObject3D('mesh');
     if (!mesh) return;
+    // model-loaded는 첫 렌더 전에 올 수 있어서, 이 시점엔 wrapper/el과 모델 내부(본 포함)의 월드 행렬이
+    // 아직 갱신 안 됐을 수 있다. 그 상태로 재면 박스는 낡은 행렬, 아래 worldToLocal은 새 행렬 기준이라
+    // 모델이 엉뚱한 곳으로 밀려난다(장생이가 얼음 밖에 보이던 원인). 스킨드 메시(장생이/고래)는 박스를
+    // 본 기준으로 계산해서 캐시하므로, 행렬을 갱신한 뒤 캐시도 비워서 다시 계산하게 한다.
+    // updateWorldMatrix(자손)는 SkinnedMesh의 bindMatrixInverse를 안 갱신해서 자손 쪽은 updateMatrixWorld로.
+    el.object3D.updateWorldMatrix(true, false);
+    mesh.updateMatrixWorld(true);
+    mesh.traverse((o) => { if (o.isSkinnedMesh) o.boundingBox = null; });
     const box = new AFRAME.THREE.Box3().setFromObject(mesh);
     const size = new AFRAME.THREE.Vector3();
     const center = new AFRAME.THREE.Vector3();
@@ -436,6 +446,14 @@ function createTargetFx() {
   return fx;
 }
 
+// 얼음+장생이(wrapper)가 사용자(카메라) 쪽을 정면으로 보게 한다. 두 모델 다 정면이 로컬 +Z라서
+// Y축 회전만으로 +Z를 사용자 쪽으로 돌린다 — lookAt처럼 높이 차이로 앞뒤로 기울지 않게 yaw만 쓴다.
+// 스폰/재배치 때만 계산하고, 이후 사용자가 움직여도 계속 따라 돌지는 않는다.
+function faceUserYaw(wrapper, pos, userPos) {
+  const yawDeg = AFRAME.THREE.MathUtils.radToDeg(Math.atan2(userPos.x - pos.x, userPos.z - pos.z));
+  wrapper.setAttribute('rotation', `0 ${yawDeg} 0`);
+}
+
 function spawnIceItems() {
   // 스폰 시점의 실제 카메라 위치를 원점으로 삼는다(스캔 대기 없이 바로 부르므로 "지금 서 있는
   // 자리" 기준 360도 배치가 됨). 아직 트래킹 포즈를 못 읽은 극초반이면 (0,0,0)으로 대체.
@@ -457,10 +475,7 @@ function spawnIceItems() {
 
     const wrapper = document.createElement('a-entity');
     wrapper.setAttribute('position', `${worldPos.x} ${worldPos.y} ${worldPos.z}`);
-    // 스폰 순간 사용자(카메라) 쪽을 보게 — puzzle.js의 faceCamera와 같은 원리(lookAt은 로컬
-    // +Z축을 타겟으로 돌림). 장생이는 이 wrapper의 자식이라 얼음과 함께 같이 돌아간다.
-    // 스폰 때 한 번만 계산하고, 이후 사용자가 움직여도 다시 돌리지 않는다.
-    wrapper.object3D.lookAt(origin.x, origin.y, origin.z);
+    faceUserYaw(wrapper, worldPos, origin);
 
     const iceEl = document.createElement('a-entity');
     iceEl.setAttribute('gltf-model', ICE_MODEL_URL);
@@ -541,6 +556,7 @@ function reclampFarIceItems(camPos) {
       z: camPos.z + radius * Math.cos(phi),
     };
     t.el.setAttribute('position', `${t.worldPos.x} ${t.worldPos.y} ${t.worldPos.z}`);
+    faceUserYaw(t.el, t.worldPos, camPos); // 새 위치에서도 사용자 쪽을 보게
   });
 }
 
