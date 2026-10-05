@@ -155,8 +155,8 @@ const MASCOT_MODEL_TARGET_SIZE_M = 0.3; // 얼음(0.45m)보다 작게 — 얼음
 // --- 배경 장식용 고래(상호작용 없음, 그냥 주변에서 헤엄치는 것처럼 보이기만 함) ---
 const WHALE_MODEL_URL = '#whale-model-asset';
 // fitLoadedModel의 스킨드 메시 측정 버그를 고친 뒤 기준으로, 이전 화면상 크기(~1.65m)의 절반(~0.8m)이
-// 되는 값에서 살짝 더 줄임. 회전된 AABB로 재기 때문에 실제 렌더 크기는 이 값보다 조금 작게 나온다(0.9 -> 약 0.70m).
-const WHALE_TARGET_SIZE_M = 0.9;
+// 되는 값에서 더 줄임. 회전된 AABB로 재기 때문에 실제 렌더 크기는 이 값보다 조금 작게 나온다(0.6 -> 약 0.47m).
+const WHALE_TARGET_SIZE_M = 0.6;
 const WHALE_COUNT = 3;
 const WHALE_SPAWN_MIN_M = 2.0;
 const WHALE_SPAWN_MAX_M = 4.0; // 얼음보다 멀찍이 둬서 상호작용 대상과 안 헷갈리게 함
