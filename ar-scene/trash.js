@@ -1,13 +1,12 @@
 // AR Scene: 얼음 깨고 장생이 구하기 모드. 8th Wall World Tracking(SLAM)으로 실측 위치를
 // 추적해서 사용자 주변에 얼음 오브젝트(3D 모델, `assets/models/Ice_Break.glb`)를 배치한다.
-// 얼음 재질이 반투명이라 그 안에 들어있는 장생이 마스코트(`assets/models/Jangsaeng.glb`)가
-// 스폰 때부터 Frozen_Idle 애니메이션으로 떨고 있는 게 비쳐 보인다. 사용자가 실제로 일정 거리
+// 얼음 재질이 반투명이라 그 안에 들어있는 아기 장생이 마스코트
+// (`assets/models/Baby_Jangsaeng_Bounce.glb`)가 얼어붙은 채 멈춰 있는 게 비쳐 보인다. 사용자가 실제로 일정 거리
 // 안까지 다가와 그 얼음을 잠깐 바라보면 "타겟팅"되는데(화면 정면으로 옮겨지지 않고 제자리에서
 // 파티클 이펙트+살짝 커지는 것으로만 표시됨), 타겟팅된 동안에만 XR8.CameraPixelArray로 카메라
 // 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로
 // 인정되고, 잡은 채로 손을 흔들면 얼음이 자체 애니메이션(Ice_Break_1_5s)으로 균열·파편화되며
-// 깨지고, 장생이는 Escape -> Celebrate_Dance -> Collect_Pose 순서로 클립을 갈아타며 튀어나와
-// 춤추고 구조된다(breakLockedItem 참고).
+// 깨지고, 장생이는 위로 살짝 떠오르며 Baby_Bounce_Loop로 통통 튀다가 구조된다(breakLockedItem 참고).
 //
 // 두 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
 // 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
@@ -211,8 +210,8 @@ let trashDecorItems = []; // { el } — pop()한 순서대로 사라짐(스폰 �
 // 없어서 직접 만듦 — tick()에서 매 프레임 mixer를 갱신해야 실제로 재생된다.
 // autoplay:false로 두면 로드만 해두고(글TF 기본 포즈로 정지) 재생은 안 하다가, 나중에
 // playClip()으로 원하는 시점에 원하는 클립을 재생할 수 있다 — 얼음 깨기(정지해 있다가 흔들 때만
-// 재생)나 장생이(Frozen_Idle 루프 -> Escape -> Celebrate_Dance -> Collect_Pose로 갈아타기)처럼
-// 클립을 여러 개 들고 있다가 상황에 맞게 바꿔 재생해야 하는 경우에 쓴다.
+// 재생)나 장생이(얼음 속에선 정지해 있다가 구출되는 순간부터 Baby_Bounce_Loop 반복)처럼
+// 원하는 시점에 클립을 재생해야 하는 경우에 쓴다.
 AFRAME.registerComponent('gltf-animation', {
   schema: { clip: { type: 'string', default: '' }, autoplay: { type: 'boolean', default: true }, loop: { type: 'boolean', default: true } },
   init() {
@@ -230,9 +229,8 @@ AFRAME.registerComponent('gltf-animation', {
   tick(time, timeDelta) {
     if (this.mixer) this.mixer.update(timeDelta / 1000);
   },
-  // 이름으로 클립을 찾아 재생한다. 이미 다른 클립이 재생 중이면 멈추고 바로 전환 —
-  // 크로스페이드 없이 잘라도, 순서대로 쓰는 클립들(Frozen_Idle -> Escape -> Celebrate_Dance
-  // -> Collect_Pose)이 애초에 서로 이어지게 만들어진 세트라 튀어 보이지 않는다.
+  // 이름으로 클립을 찾아 재생한다(없으면 첫 클립으로 대체). 이미 다른 클립이 재생 중이면
+  // 크로스페이드 없이 멈추고 바로 전환한다.
   playClip(name, { loop = true } = {}) {
     if (!this.mixer || !this.clips || !this.clips.length) return;
     const clip = (name && this.clips.find((c) => c.name === name)) || this.clips[0];
@@ -475,9 +473,9 @@ function spawnIceItems() {
     const mascotEl = document.createElement('a-entity');
     mascotEl.setAttribute('gltf-model', MASCOT_MODEL_URL);
     fitLoadedModel(mascotEl, MASCOT_MODEL_TARGET_SIZE_M);
-    // 더 이상 숨기지 않는다 — 얼음 재질이 이미 반투명(alpha 0.26)이라, 스폰 때부터 Frozen_Idle을
-    // 반복재생해두면 얼음 속에서 장생이가 떨고 있는 게 비쳐 보인다.
-    mascotEl.setAttribute('gltf-animation', 'clip: Frozen_Idle; loop: true');
+    // 더 이상 숨기지 않는다 — 얼음 재질이 이미 반투명(alpha 0.26)이라 얼음 속 장생이가 비쳐 보인다.
+    // 얼어붙은 느낌을 주려고 로드만 해두고(기본 포즈로 정지) 구출되는 순간에만 Bounce를 재생한다.
+    mascotEl.setAttribute('gltf-animation', 'clip: Baby_Bounce_Loop; autoplay: false; loop: true');
     wrapper.appendChild(mascotEl);
 
     const targetFx = createTargetFx();
@@ -663,19 +661,20 @@ function checkShake(x, y, now) {
 }
 
 // --- 깨짐 이펙트 ---
-// 얼음/장생이 둘 다 이제 실제 애니메이션 클립을 갖고 있어서(Ice_Break_1_5s, Frozen_Idle/Escape/
-// Celebrate_Dance/Collect_Pose), 아래 타이밍은 임의값이 아니라 그 클립들의 실제 길이 그대로다.
+// 얼음/장생이 둘 다 실제 애니메이션 클립을 갖고 있어서(Ice_Break_1_5s, Baby_Bounce_Loop),
+// 아래 타이밍은 임의값이 아니라 그 클립들의 실제 길이 그대로다.
 // BREAK_EFFECT_MS는 이 연출과 무관하게 다른 곳(못 깬 나머지 얼음 정리, 장식 쓰레기 소멸)에서
 // 계속 쓰는 짧은 페이드용 상수라 그대로 둔다.
 const BREAK_EFFECT_MS = 800;
 const ICE_SHATTER_MOMENT_MS = 500; // Ice_Break_1_5s에서 Ice_Intact가 사라지고 파편이 튀는 순간(글TF 키프레임 확인)
-const ESCAPE_CLIP_MS = 1033;
-const CELEBRATE_DANCE_CLIP_MS = 2033;
-const COLLECT_POSE_CLIP_MS = 1033;
-const MASCOT_FADE_MS = 500; // Collect_Pose 이후 사라지는 연출(클립엔 없어서 기존처럼 scale 페이드로 처리)
+const BOUNCE_CLIP_MS = 2033; // Baby_Bounce_Loop 한 번 길이(통통 2회)
+const BOUNCE_REPEAT = 2; // 구출 후 사라지기 전까지 Bounce를 몇 번 반복할지
+const MASCOT_RISE_M = 0.25; // 얼음이 깨질 때 장생이가 위로 떠오르는 높이(클립엔 이동이 없어서 위치 트윈으로 처리)
+const MASCOT_RISE_MS = 600;
+const MASCOT_FADE_MS = 500; // Bounce 이후 사라지는 연출(클립엔 없어서 scale 페이드로 처리)
 // 얼음 하나당 연출 총 길이 — 완료 화면/클리어 영상은 이 시간이 다 지난 뒤에 떠야 마지막 장생이
 // 연출이 중간에 끊기지 않는다.
-const RESCUE_SEQUENCE_MS = ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS + CELEBRATE_DANCE_CLIP_MS + COLLECT_POSE_CLIP_MS + MASCOT_FADE_MS;
+const RESCUE_SEQUENCE_MS = ICE_SHATTER_MOMENT_MS + BOUNCE_CLIP_MS * BOUNCE_REPEAT + MASCOT_FADE_MS;
 const FINISH_DELAY_MS = 2000; // 마지막 연출이 다 끝난 뒤 이만큼 더 지나서 완료 화면을 띄움
 
 // 목표(RESCUE_COUNT)를 다 채우면, 스폰됐지만 아직 못 깬 나머지 얼음은 그냥 없앤다.
@@ -702,26 +701,25 @@ function breakLockedItem() {
   // 얼음 자체가 스스로 깨진다(균열 -> 파편 흩어짐, 1.5초) — 파편을 따로 만들 필요 없음.
   item.iceEl.components['gltf-animation'].playClip('Ice_Break_1_5s', { loop: false });
 
-  // 장생이는 Frozen_Idle을 계속 반복 중이었으니, 얼음이 실제로 터지는 순간(ICE_SHATTER_MOMENT_MS)에
-  // 맞춰 Escape로 갈아타고, 이어서 Celebrate_Dance -> Collect_Pose 순서로 넘어간다. Escape 클립
-  // 자체에 위로 튀어오르는 움직임이 이미 리깅돼 있어서(0.42m) 별도 position 트윈이 필요 없다.
+  // 장생이는 얼음 속에서 정지해 있다가, 얼음이 실제로 터지는 순간(ICE_SHATTER_MOMENT_MS)에 위로
+  // 떠오르면서 Baby_Bounce_Loop를 반복 재생한다(fitLoadedModel은 내부 mesh 위치만 건드려서 이
+  // 엔티티 위치 트윈과 충돌하지 않음).
   const mascotAnim = item.mascotEl.components['gltf-animation'];
-  setTimeout(() => mascotAnim.playClip('Escape', { loop: false }), ICE_SHATTER_MOMENT_MS);
-  setTimeout(
-    () => mascotAnim.playClip('Celebrate_Dance', { loop: false }),
-    ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS,
-  );
-  setTimeout(
-    () => mascotAnim.playClip('Collect_Pose', { loop: false }),
-    ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS + CELEBRATE_DANCE_CLIP_MS,
-  );
-  // Collect_Pose까지 끝나면 클립에 없는 "사라지는" 연출만 기존처럼 scale 페이드로 처리한다.
+  setTimeout(() => {
+    mascotAnim.playClip('Baby_Bounce_Loop', { loop: true });
+    const { x, y, z } = item.mascotEl.object3D.position;
+    item.mascotEl.setAttribute(
+      'animation__rise',
+      `property: position; to: ${x} ${y + MASCOT_RISE_M} ${z}; dur: ${MASCOT_RISE_MS}; easing: easeOutQuad`,
+    );
+  }, ICE_SHATTER_MOMENT_MS);
+  // Bounce를 BOUNCE_REPEAT번 보여준 뒤 클립에 없는 "사라지는" 연출만 scale 페이드로 처리한다.
   setTimeout(() => {
     item.mascotEl.setAttribute(
       'animation__collected-fade',
       `property: scale; to: 0.001 0.001 0.001; dur: ${MASCOT_FADE_MS}; easing: easeInQuad`,
     );
-  }, ICE_SHATTER_MOMENT_MS + ESCAPE_CLIP_MS + CELEBRATE_DANCE_CLIP_MS + COLLECT_POSE_CLIP_MS);
+  }, ICE_SHATTER_MOMENT_MS + BOUNCE_CLIP_MS * BOUNCE_REPEAT);
 
   setTimeout(() => {
     item.el.remove();

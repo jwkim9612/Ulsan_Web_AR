@@ -48,7 +48,7 @@ function onFound(target) {
 // 자산을 다 대상으로 한다 — 실패해도 캐시 예열 목적일 뿐이라 그냥 무시한다.
 const PREFETCH_URLS = [
   '../assets/models/Ice_Break.glb',
-  '../assets/models/Jangsaeng.glb',
+  '../assets/models/Baby_Jangsaeng_Bounce.glb',
   '../assets/models/Whale_Low.glb',
   '../assets/models/Branching_Coral.glb',
   '../assets/models/Mound_Coral.glb',
