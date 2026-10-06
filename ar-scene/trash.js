@@ -7,7 +7,8 @@
 // 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로
 // 인정되고, 잡은 채로 손을 흔들면 얼음이 자체 애니메이션(Ice_Break_1_5s)으로 균열·파편화되며
 // 깨지고, 장생이는 위로 살짝 떠오르며 Baby_Bounce_Loop로 통통 튀다가 구조된다(breakLockedItem 참고).
-// 타겟팅(잡기 포함) 도중 그 얼음에서 시선을 돌린 채 잠깐 지나면 타겟팅이 풀린다(releaseLock 참고).
+// 타겟팅되면 얼음이 사용자 쪽으로 살짝 당겨지고(pullIceTowardCamera), 타겟팅(잡기 포함) 도중
+// 그 얼음에서 시선을 돌린 채 잠깐 지나면 타겟팅이 풀리며 원래 자리로 돌아간다(releaseLock 참고).
 //
 // 두 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
 // 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
@@ -131,6 +132,11 @@ const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지�
 const UNLOCK_GAZE_DOT_THRESHOLD = 0.65; // 약 49도 밖으로 벗어나면 "안 보고 있음"
 const UNLOCK_DISTANCE_M = LOCK_DISTANCE_M + 1.0;
 const UNLOCK_GRACE_MS = 1500; // 벗어난 상태가 이만큼 계속돼야 실제로 해제
+// 타겟팅되면 얼음을 사용자 쪽으로 살짝 당겨온다(월드 공간에서 카메라 방향 직선을 따라 이동할 뿐,
+// 예전처럼 카메라 정면에 고정시키지는 않음). 타겟팅이 풀리면 원래 자리(homePos)로 돌아간다.
+const PULL_RATIO = 0.5; // 현재 거리의 이 비율만큼 다가옴
+const PULL_MIN_DISTANCE_M = 0.7; // 이보다 가까이는 당기지 않음(이미 가까우면 이동 안 함)
+const PULL_MS = 500;
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
 // 단안 카메라 SLAM은 실측 스케일 추정이 트래킹 도중에도 계속 재조정될 수 있어서, 스폰 때는
@@ -506,7 +512,7 @@ function spawnIceItems() {
     trashRoot.appendChild(wrapper);
 
     iceItems.push({
-      el: wrapper, iceEl, mascotEl, targetFx, worldPos, grabbed: false, removed: false,
+      el: wrapper, iceEl, mascotEl, targetFx, worldPos, homePos: { ...worldPos }, grabbed: false, removed: false,
     });
   }
   updateTrashCountText();
@@ -562,14 +568,39 @@ function reclampFarIceItems(camPos) {
       y: camPos.y + SPAWN_HEIGHT_OFFSET_M + radius * Math.sin(phi) * Math.sin(theta) * 0.4,
       z: camPos.z + radius * Math.cos(phi),
     };
+    t.homePos = { ...t.worldPos };
+    t.el.removeAttribute('animation__pull'); // 원위치로 돌아가던 중이면 그 애니메이션이 새 위치를 덮어쓰지 않게
     t.el.setAttribute('position', `${t.worldPos.x} ${t.worldPos.y} ${t.worldPos.z}`);
     faceUserYaw(t.el, t.worldPos, camPos); // 새 위치에서도 사용자 쪽을 보게
   });
 }
 
+// 얼음(wrapper)을 pos로 부드럽게 이동시킨다. worldPos도 같이 바꿔서 해제 판정(updateLock)이 새 위치
+// 기준으로 동작하게 한다. 같은 이름의 애니메이션을 다시 걸면 진행 중이던 이동을 덮어쓰고 새로 시작.
+function moveIceTo(item, pos) {
+  item.worldPos = pos;
+  item.el.setAttribute(
+    'animation__pull',
+    `property: position; to: ${pos.x} ${pos.y} ${pos.z}; dur: ${PULL_MS}; easing: easeOutQuad`,
+  );
+}
+
+function pullIceTowardCamera(item, camPos) {
+  const d = dist(camPos, item.worldPos);
+  const newD = Math.max(PULL_MIN_DISTANCE_M, d * (1 - PULL_RATIO));
+  if (newD >= d) return;
+  const k = newD / d;
+  moveIceTo(item, {
+    x: camPos.x + (item.worldPos.x - camPos.x) * k,
+    y: camPos.y + (item.worldPos.y - camPos.y) * k,
+    z: camPos.z + (item.worldPos.z - camPos.z) * k,
+  });
+}
+
 // 예전에는 타겟팅(lock)되면 얼음을 카메라 정면 고정 거리로 "순간이동"시켰는데, 사용자 요청으로
 // 그 방식은 없앴다. 이제 얼음은 스폰된 실제 위치에 계속 그대로 있고, 타겟팅되면(onLockStart)
-// 그 자리에서 파티클 이펙트(targetFx)가 뜨고 살짝 커지는(TARGETED_ICE_SCALE) 것으로만 표시한다.
+// 파티클 이펙트(targetFx)가 뜨고 살짝 커지며(TARGETED_ICE_SCALE), 월드 공간에서 사용자 쪽으로
+// 조금 당겨진다(pullIceTowardCamera — 카메라에 붙이지 않으므로 고개를 돌리면 화면 밖으로 나감).
 // 이미 타겟팅된 뒤에는 그 얼음을 계속 보고 있는지만 확인해서, 다른 곳을 UNLOCK_GRACE_MS 이상
 // 보고 있으면(잡은 상태였어도) 타겟팅을 풀어 다시 아무 얼음이나 고를 수 있게 한다.
 function updateLock() {
@@ -621,6 +652,7 @@ function updateLock() {
   lockedItem.iceEl.setAttribute('scale', `${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE}`);
   trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
   if (DEBUG) debugState.locked = true;
+  pullIceTowardCamera(lockedItem, camPos);
   onLockStart();
 }
 
@@ -632,6 +664,7 @@ function releaseLock() {
   item.grabbed = false;
   item.targetFx.setAttribute('visible', false);
   item.iceEl.setAttribute('scale', '1 1 1');
+  moveIceTo(item, { ...item.homePos }); // 당겨왔던 얼음을 원래 자리로 되돌림
   lockedItem = null;
   lockLostSince = null;
   onLockEnd();
