@@ -7,6 +7,7 @@
 // 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로
 // 인정되고, 잡은 채로 손을 흔들면 얼음이 자체 애니메이션(Ice_Break_1_5s)으로 균열·파편화되며
 // 깨지고, 장생이는 위로 살짝 떠오르며 Baby_Bounce_Loop로 통통 튀다가 구조된다(breakLockedItem 참고).
+// 타겟팅(잡기 포함) 도중 그 얼음에서 시선을 돌린 채 잠깐 지나면 타겟팅이 풀린다(releaseLock 참고).
 //
 // 두 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
 // 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
@@ -125,6 +126,11 @@ const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 
                               // 수 있어서, "바라보고 있는지"를 같이 봐서 느슨하게 함)
 const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지해야 실제로 타겟팅됨(스치듯 지나가는 것 방지)
+// 타겟팅(잡기 포함) 해제 조건 — 락 조건보다 넓게 잡아서(히스테리시스) 흔드는 도중 카메라가 살짝
+// 돌아가거나 한 발 물러선 정도로는 안 풀리고, 확실히 다른 곳을 볼 때만 풀린다.
+const UNLOCK_GAZE_DOT_THRESHOLD = 0.65; // 약 49도 밖으로 벗어나면 "안 보고 있음"
+const UNLOCK_DISTANCE_M = LOCK_DISTANCE_M + 1.0;
+const UNLOCK_GRACE_MS = 1500; // 벗어난 상태가 이만큼 계속돼야 실제로 해제
 const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위로 띄워서 배치
 
 // 단안 카메라 SLAM은 실측 스케일 추정이 트래킹 도중에도 계속 재조정될 수 있어서, 스폰 때는
@@ -141,6 +147,7 @@ let lockedItem = null;
 let rescuedCount = 0;
 let lockCandidate = null; // 거리+응시 조건을 만족하기 시작한 얼음(아직 확정 lock 전)
 let lockCandidateStartedAt = null;
+let lockLostSince = null; // 타겟팅된 얼음이 시야/거리 밖으로 벗어나기 시작한 시점(해제 유예 판정용)
 
 // trash.html의 <a-assets>에 등록된 #id를 참조 — 이렇게 하면 씬 로딩 단계(xrextras-loading이
 // 떠 있는 동안)에 A-Frame이 한 번만 fetch/parse해두고, 아래에서 5/5/3개씩 만드는 인스턴스는
@@ -563,13 +570,27 @@ function reclampFarIceItems(camPos) {
 // 예전에는 타겟팅(lock)되면 얼음을 카메라 정면 고정 거리로 "순간이동"시켰는데, 사용자 요청으로
 // 그 방식은 없앴다. 이제 얼음은 스폰된 실제 위치에 계속 그대로 있고, 타겟팅되면(onLockStart)
 // 그 자리에서 파티클 이펙트(targetFx)가 뜨고 살짝 커지는(TARGETED_ICE_SCALE) 것으로만 표시한다.
-// 그래서 이미 타겟팅된 뒤에는 매 프레임 할 일이 없어 바로 리턴한다.
+// 이미 타겟팅된 뒤에는 그 얼음을 계속 보고 있는지만 확인해서, 다른 곳을 UNLOCK_GRACE_MS 이상
+// 보고 있으면(잡은 상태였어도) 타겟팅을 풀어 다시 아무 얼음이나 고를 수 있게 한다.
 function updateLock() {
-  if (lockedItem) return;
-
   const pose = getCameraPose();
   if (!pose) return;
   const { camPos, forward } = pose;
+
+  if (lockedItem) {
+    const t = lockedItem;
+    toItemScratch.set(t.worldPos.x - camPos.x, t.worldPos.y - camPos.y, t.worldPos.z - camPos.z).normalize();
+    const stillWatching = dist(camPos, t.worldPos) < UNLOCK_DISTANCE_M
+      && toItemScratch.dot(forward) >= UNLOCK_GAZE_DOT_THRESHOLD;
+    if (stillWatching) {
+      lockLostSince = null;
+    } else if (lockLostSince === null) {
+      lockLostSince = performance.now();
+    } else if (performance.now() - lockLostSince >= UNLOCK_GRACE_MS) {
+      releaseLock();
+    }
+    return;
+  }
 
   reclampFarIceItems(camPos);
 
@@ -603,6 +624,21 @@ function updateLock() {
   onLockStart();
 }
 
+// 시선 이탈로 타겟팅(잡기 포함)을 푼다 — 얼음은 원래 크기/이펙트 없음 상태로 되돌리고, 손 인식
+// 파이프라인도 onLockEnd()로 같이 내린다(다음 타겟팅 때 onLockStart()가 다시 올림).
+function releaseLock() {
+  const item = lockedItem;
+  if (!item) return;
+  item.grabbed = false;
+  item.targetFx.setAttribute('visible', false);
+  item.iceEl.setAttribute('scale', '1 1 1');
+  lockedItem = null;
+  lockLostSince = null;
+  onLockEnd();
+  trashHintEl.textContent = '얼음을 다시 바라봐 주세요';
+  if (DEBUG) debugLog('lock released: looked away');
+}
+
 function updateTrashCountText() {
   trashCountText.textContent = `${rescuedCount}/${RESCUE_COUNT}`;
 }
@@ -620,17 +656,21 @@ const distanceTrackerModule = {
 // 얼음이 보이는 방향으로 카메라를 든 채 손을 화면 중앙(잡기 존)으로 뻗어야 한다 — 실제로 눈앞의
 // 얼음을 향해 손을 뻗는 느낌에 더 가까워짐. 판정 자체는 손 랜드마크의 정규화 좌표(0~1)가 화면
 // 중앙 근처에 있는지만 본다(얼음과의 화면상 정확한 겹침까지는 계산하지 않는 단순화).
-const GRAB_ZONE_MIN = 0.35;
-const GRAB_ZONE_MAX = 0.65;
-const GRAB_DWELL_MS = 400; // 이 시간만큼 잡기 존 안에 머물러야 "잡기"로 인정(실수 방지)
+// 너무 빡빡하다는 피드백으로 존을 화면 중앙 70%까지 넓히고 유지 시간도 줄였다.
+const GRAB_ZONE_MIN = 0.15;
+const GRAB_ZONE_MAX = 0.85;
+const GRAB_DWELL_MS = 250; // 이 시간만큼 잡기 존 안에 머물러야 "잡기"로 인정(실수 방지)
+const GRAB_ZONE_GRACE_MS = 200; // 존을 잠깐 벗어나거나 손 검출이 한두 프레임 끊겨도 이 시간 안이면 유지 타이머를 리셋하지 않음
 
 let grabDwellStartedAt = null;
+let lastInZoneAt = 0;
 
 // gltf-model은 A-Frame의 material 컴포넌트로 색을 바꿀 수 없어서(모델 자체 재질을 쓰므로),
 // 잡았을 때 피드백은 스케일 변화로만 표현한다. 타겟팅 상태(TARGETED_ICE_SCALE)보다 한 단계 더
 // 커져서(GRABBED_ICE_SCALE) "쥐었다"는 게 구분된다. 한 번 잡으면(grabbed=true) 손이 잡기 존을
 // 벗어나도 "놓은 것"으로 되돌리지 않고 계속 흔들기 판정으로 넘어간다 — 깨는 도중 손이 살짝
-// 존을 벗어났다고 다시 잡기부터 시작해야 하면 답답하기 때문.
+// 존을 벗어났다고 다시 잡기부터 시작해야 하면 답답하기 때문. 단, 얼음에서 시선을 확실히 돌리면
+// updateLock()의 releaseLock()이 잡은 상태까지 같이 푼다.
 function onGrab(item) {
   item.grabbed = true;
   item.iceEl.setAttribute('scale', `${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE}`);
@@ -712,6 +752,7 @@ function breakLockedItem() {
 
   item.removed = true;
   lockedItem = null;
+  lockLostSince = null;
   onLockEnd();
 
   // 얼음 자체가 스스로 깨진다(균열 -> 파편 흩어짐, 1.5초) — 파편을 따로 만들 필요 없음.
@@ -769,7 +810,7 @@ const hands = new Hands({
 hands.setOptions({
   maxNumHands: 1,
   modelComplexity: 0,
-  minDetectionConfidence: 0.6,
+  minDetectionConfidence: 0.5,
   minTrackingConfidence: 0.5,
 });
 
@@ -780,7 +821,7 @@ hands.onResults((results) => {
   const hasHand = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
   if (DEBUG) debugState.lastLandmarkCount = hasHand ? results.multiHandLandmarks[0].length : 0;
   if (!hasHand) {
-    grabDwellStartedAt = null;
+    if (performance.now() - lastInZoneAt > GRAB_ZONE_GRACE_MS) grabDwellStartedAt = null;
     shakeHistory = [];
     return;
   }
@@ -799,7 +840,11 @@ hands.onResults((results) => {
     && palm.y >= GRAB_ZONE_MIN && palm.y <= GRAB_ZONE_MAX;
 
   if (!lockedItem.grabbed) {
-    if (!inZone) { grabDwellStartedAt = null; return; }
+    if (!inZone) {
+      if (now - lastInZoneAt > GRAB_ZONE_GRACE_MS) grabDwellStartedAt = null;
+      return;
+    }
+    lastInZoneAt = now;
     if (grabDwellStartedAt === null) { grabDwellStartedAt = now; return; }
     if (now - grabDwellStartedAt < GRAB_DWELL_MS) return;
     grabDwellStartedAt = null;
