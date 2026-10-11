@@ -1024,6 +1024,44 @@ function onLockEnd() {
   shakeHistory = [];
 }
 
+// --- 촬영 팁 팝업 ---
+// 벽만 비추거나 어두우면 World Tracking이 위치를 놓쳐 얼음이 날아가고, 손을 카메라에 너무
+// 바짝 대면 손이 화면을 꽉 채워 MediaPipe Hands가 인식을 못 한다 — 게임 화면에 들어오면
+// 이 두 가지를 몇 초간 안내한다. 게임 진행(스폰/판정)은 팝업과 무관하게 그대로 돌아간다.
+const TIPS_POPUP_MS = 6000;
+const tipsPopupEl = document.getElementById('tips-popup');
+const tipsProgressBarEl = document.getElementById('tips-progress-bar');
+
+function showTipsPopup() {
+  let closed = false;
+  let autoCloseTimer = null;
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(autoCloseTimer);
+    tipsPopupEl.classList.remove('visible');
+    setTimeout(() => { tipsPopupEl.style.display = 'none'; }, 300); // CSS opacity transition과 맞춤
+  };
+
+  tipsPopupEl.style.display = 'flex';
+  tipsProgressBarEl.style.transition = 'none';
+  tipsProgressBarEl.style.width = '100%';
+  // display 변경이 반영된 다음 프레임에 페이드인/진행 바 애니메이션을 시작해야 transition이 먹는다.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    tipsPopupEl.classList.add('visible');
+    tipsProgressBarEl.style.transition = `width ${TIPS_POPUP_MS}ms linear`;
+    tipsProgressBarEl.style.width = '0%';
+  }));
+
+  autoCloseTimer = setTimeout(close, TIPS_POPUP_MS);
+  tipsPopupEl.addEventListener('click', close, { once: true });
+}
+
+// onxrloaded 시점엔 아직 xrextras 로딩 화면이 덮고 있으므로, 카메라 화면이 실제로 보이기
+// 시작하는 realityready에 맞춰 띄운다.
+document.querySelector('a-scene').addEventListener('realityready', showTipsPopup, { once: true });
+
 // --- 초기화 ---
 // 참고: 단안 카메라 기반 SLAM은 트래킹 시작 직후 몇 초간 실측 스케일(m 단위) 추정이 아직
 // 안정되지 않은 상태라, 스캔 대기 없이 바로 배치하면 스케일이 재추정될 때마다 위치가 흔들려서
