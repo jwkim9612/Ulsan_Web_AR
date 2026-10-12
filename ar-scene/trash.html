@@ -140,6 +140,31 @@
       background: rgba(0,0,0,0.5); padding: 16px 28px; border-radius: 12px;
     }
 
+    /* 얼음 타겟팅 후 손이 한동안 인식되지 않으면 띄우는 안내(손 인식 즉시 사라짐).
+       터치를 막지 않도록 pointer-events: none, 팁 팝업(40)보다 아래. */
+    #hand-guide {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 25; pointer-events: none;
+      width: min(80vw, 320px); box-sizing: border-box;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 18px 20px; border-radius: 16px;
+      background: rgba(0,0,0,0.55); color: #fff; text-align: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
+    }
+    #hand-guide.visible { opacity: 1; visibility: visible; }
+    #hand-guide-icon {
+      font-size: 64px; line-height: 1;
+      animation: hand-guide-pulse 1.4s ease-in-out infinite;
+    }
+    /* 크게 → 작게: 손을 카메라에서 멀리 떨어뜨리는 동작을 표현 */
+    @keyframes hand-guide-pulse {
+      0%, 100% { transform: scale(1.25); }
+      50% { transform: scale(0.85); }
+    }
+    #hand-guide strong { margin-top: 12px; font-size: 18px; font-weight: 800; }
+    #hand-guide p { margin: 6px 0 0; font-size: 14px; line-height: 1.5; }
+
     /* 게임 화면 입장 시 몇 초간 띄우는 촬영 팁 팝업 — 하단 안내 카드(#bottom-panel)와 같은 톤.
        상/하단 패널(30)보다 위, 완료 화면(50)/클리어 영상(60)보다는 아래. */
     #tips-popup {
@@ -349,6 +374,11 @@
   <div id="trash-count"><span id="trash-count-text">0/3</span></div>
   <div id="trash-hint"></div>
   <div id="trash-finished">장생이를 모두 구했어요!</div>
+  <div id="hand-guide">
+    <div id="hand-guide-icon">✋</div>
+    <strong>손이 잘 보이지 않아요</strong>
+    <p>손을 카메라에서 조금 멀리 떨어뜨려<br>손가락까지 화면에 다 보이게 해주세요</p>
+  </div>
 
   <div id="tips-popup">
     <div id="tips-card">

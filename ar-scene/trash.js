@@ -36,6 +36,7 @@ const completeOverlayEl = document.getElementById('complete-overlay');
 const completeWhaleImgEl = document.getElementById('complete-whale');
 const clearVideoEl = document.getElementById('clear-video');
 const completeBtn = document.getElementById('complete-btn');
+const handGuideEl = document.getElementById('hand-guide');
 const handCanvas = document.getElementById('hand-canvas');
 
 // 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
@@ -690,8 +691,27 @@ const distanceTrackerModule = {
   onUpdate: ({ processCpuResult }) => {
     if (!processCpuResult.reality) return; // 트래킹이 아직 준비 안 된 경우를 걸러내는 용도로만 사용
     updateLock();
+    updateHandGuide();
   },
 };
+
+// --- 손 인식 안내 ---
+// 얼음을 타겟팅한 뒤 HAND_GUIDE_DELAY_MS 동안 손이 한 번도 인식되지 않으면(대개 손을 카메라에
+// 너무 바짝 대서 화면을 꽉 채운 경우) 화면 가운데에 손을 멀리 떨어뜨리라는 안내를 띄운다.
+// 손이 인식되면 바로 숨기고 게임은 그대로 진행된다. hands.onResults는 프레임 전송이 실패하면
+// 아예 안 불릴 수 있어서, 표시 판정은 매 프레임 도는 이 루프에서 한다.
+const HAND_GUIDE_DELAY_MS = 3000;
+let lastHandSeenAt = 0;
+
+function updateHandGuide() {
+  if (lockedItem && performance.now() - lastHandSeenAt > HAND_GUIDE_DELAY_MS) {
+    handGuideEl.classList.add('visible');
+  }
+}
+
+function hideHandGuide() {
+  handGuideEl.classList.remove('visible');
+}
 
 // --- 잡기(grab) 판정 ---
 // 얼음은 이제 실제 스폰 위치에 그대로 있고 화면 정면으로 순간이동하지 않으므로, 잡으려면 타겟팅된
@@ -868,6 +888,9 @@ hands.onResults((results) => {
     return;
   }
 
+  lastHandSeenAt = performance.now();
+  hideHandGuide();
+
   // 손 뼈대(랜드마크) 시각화 — 사용자 요청으로 잠시 꺼둠(필요하면 주석 해제해서 다시 켤 것).
   // for (const landmarks of results.multiHandLandmarks) {
   //   drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, { color: '#2ea5ff', lineWidth: 3 });
@@ -980,6 +1003,7 @@ const cvModule = {
 let cvActive = false;
 
 function onLockStart() {
+  lastHandSeenAt = performance.now(); // 락 시점부터 손 인식 안내 대기시간을 센다
   if (DEBUG) {
     debugState.pipelineStatus = 'attempting';
     debugLog('onLockStart: registering pipeline modules');
@@ -1029,6 +1053,7 @@ function onLockEnd() {
   }
   if (DEBUG) { debugState.cvActive = false; debugState.locked = false; debugState.pipelineStatus = 'idle'; }
   handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
+  hideHandGuide();
   grabDwellStartedAt = null;
   shakeHistory = [];
 }
