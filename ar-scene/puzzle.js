@@ -22,6 +22,7 @@ const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 const completeWhaleImgEl = document.getElementById('complete-whale');
 const clearVideoEl = document.getElementById('clear-video');
+const completeBtn = document.getElementById('complete-btn');
 
 // 다 맞춘 순간에 src를 지정하면 디코딩 지연으로 살짝 깜빡여 보임 —
 // 미리 받아서 decode()까지 끝내둔 다음, 필요할 때는 display만 바꾼다.
@@ -47,6 +48,14 @@ if (new URLSearchParams(location.search).get('preview') === 'complete') {
 
 backBtn.addEventListener('click', () => {
   SFX.navigate('scan.html');
+});
+
+// 완료 화면이 먼저 뜨고, 돌아가기 버튼을 누르면 클리어 영상을 보여준 뒤 메인으로 이동한다.
+// 버튼 탭(사용자 제스처) 안에서 영상을 시작해야 모바일에서도 소리 켠 재생이 허용된다.
+completeBtn.addEventListener('click', () => {
+  if (completeBtn.disabled) return;
+  completeBtn.disabled = true;
+  GameClear.playVideo(clearVideoEl, () => SFX.navigate('scan.html'));
 });
 
 const collectedPieces = new Set();
@@ -75,7 +84,7 @@ function showPuzzleFinished() {
   GameClear.markCleared('puzzle');
 
   setTimeout(() => {
-    GameClear.playVideo(clearVideoEl, revealCompleteOverlay);
+    revealCompleteOverlay();
   }, FINISH_DELAY_MS);
 }
 

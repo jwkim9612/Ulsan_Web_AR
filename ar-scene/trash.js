@@ -35,6 +35,7 @@ const statusPillEl = document.getElementById('status-pill');
 const completeOverlayEl = document.getElementById('complete-overlay');
 const completeWhaleImgEl = document.getElementById('complete-whale');
 const clearVideoEl = document.getElementById('clear-video');
+const completeBtn = document.getElementById('complete-btn');
 const handCanvas = document.getElementById('hand-canvas');
 
 // 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
@@ -53,6 +54,14 @@ function revealCompleteOverlay() {
 if (new URLSearchParams(location.search).get('preview') === 'complete') {
   revealCompleteOverlay();
 }
+
+// 완료 화면이 먼저 뜨고, 돌아가기 버튼을 누르면 클리어 영상을 보여준 뒤 메인으로 이동한다.
+// 버튼 탭(사용자 제스처) 안에서 영상을 시작해야 모바일에서도 소리 켠 재생이 허용된다.
+completeBtn.addEventListener('click', () => {
+  if (completeBtn.disabled) return;
+  completeBtn.disabled = true;
+  GameClear.playVideo(clearVideoEl, () => SFX.navigate('scan.html'));
+});
 const handCtx = handCanvas.getContext('2d');
 
 // --- 안드로이드 크롬 손 인식 미동작 진단용 디버그 오버레이 (?debug=1) ---
@@ -829,7 +838,7 @@ function breakLockedItem() {
       trashFinishedEl.style.display = 'block';
     }, RESCUE_SEQUENCE_MS);
     setTimeout(() => {
-      GameClear.playVideo(clearVideoEl, revealCompleteOverlay);
+      revealCompleteOverlay();
     }, RESCUE_SEQUENCE_MS + FINISH_DELAY_MS);
   } else {
     SFX.play('ice_collect');
