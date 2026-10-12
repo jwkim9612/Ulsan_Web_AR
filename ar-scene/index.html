@@ -248,7 +248,7 @@
     }
 
     /* 게임 클리어 영상 — 완료 화면(z-index 50)보다 위에서 전체화면으로 재생 */
-    #clear-video {
+    #clear-video, #allclear-video {
       position: fixed; inset: 0; z-index: 60; display: none;
       width: 100%; height: 100%; object-fit: contain; background: #000;
     }
@@ -333,6 +333,8 @@
   </div>
 
   <video id="clear-video" src="../assets/videos/GameClearVideo.mp4" playsinline webkit-playsinline preload="auto"></video>
+  <!-- 두 게임을 모두 깬 순간 완료 팝업보다 먼저 재생. 9MB라 게임 로딩과 겹치지 않게 메타데이터만 미리 받음 -->
+  <video id="allclear-video" src="../assets/videos/AllClearVideo.mp4" playsinline webkit-playsinline preload="metadata"></video>
 
   <script src="../assets/sfx.js" data-base="../assets/sounds/"></script>
   <script src="../assets/game-clear.js"></script>

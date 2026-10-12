@@ -36,6 +36,20 @@ const completeOverlayEl = document.getElementById('complete-overlay');
 const completeWhaleImgEl = document.getElementById('complete-whale');
 const clearVideoEl = document.getElementById('clear-video');
 const completeBtn = document.getElementById('complete-btn');
+const allClearVideoEl = document.getElementById('allclear-video');
+// 두 게임을 다 깬 순간(올클리어)이면 true — 완료 팝업 전에 올클리어 영상을 틀고, 팝업 버튼은
+// 클리어 영상 없이 바로 메인으로 보낸다.
+let allCleared = false;
+
+// 올클리어 영상은 버튼 탭 없이(게임 진행 중 자동으로) 재생되므로, 첫 터치 때 무음으로
+// 한 번 재생→정지해 둬서 모바일에서도 나중에 소리 켠 재생이 허용되게 한다.
+document.addEventListener('pointerdown', () => {
+  allClearVideoEl.muted = true;
+  allClearVideoEl.play().then(() => {
+    allClearVideoEl.pause();
+    allClearVideoEl.currentTime = 0;
+  }).catch(() => {});
+}, { once: true });
 const handGuideEl = document.getElementById('hand-guide');
 const handGuideIconEl = document.getElementById('hand-guide-icon');
 const handCanvas = document.getElementById('hand-canvas');
@@ -59,9 +73,14 @@ if (new URLSearchParams(location.search).get('preview') === 'complete') {
 
 // 완료 화면이 먼저 뜨고, 돌아가기 버튼을 누르면 클리어 영상을 보여준 뒤 메인으로 이동한다.
 // 버튼 탭(사용자 제스처) 안에서 영상을 시작해야 모바일에서도 소리 켠 재생이 허용된다.
+// 올클리어였다면 올클리어 영상을 이미 본 뒤라 클리어 영상 없이 바로 메인으로 간다.
 completeBtn.addEventListener('click', () => {
   if (completeBtn.disabled) return;
   completeBtn.disabled = true;
+  if (allCleared) {
+    SFX.navigate('scan.html');
+    return;
+  }
   GameClear.playVideo(clearVideoEl, () => SFX.navigate('scan.html'));
 });
 const handCtx = handCanvas.getContext('2d');
@@ -855,11 +874,16 @@ function breakLockedItem() {
     statusPillEl.textContent = '미션 완료';
     SFX.playThenLoop('ice_success', 'complete_bgm_loop');
     GameClear.markCleared('trash');
+    // 이번 클리어로 두 게임이 다 깨졌으면 올클리어 — 기록은 바로 지워서 다음에 또 둘 다 깨면
+    // 다시 올클리어 영상이 나오게 하고, 영상 도중 이탈해도 반복 재생되지 않게 한다.
+    allCleared = GameClear.isBothCleared();
+    if (allCleared) GameClear.resetCleared();
     setTimeout(() => {
       trashFinishedEl.style.display = 'block';
     }, RESCUE_SEQUENCE_MS);
     setTimeout(() => {
-      revealCompleteOverlay();
+      if (allCleared) GameClear.playVideo(allClearVideoEl, revealCompleteOverlay);
+      else revealCompleteOverlay();
     }, RESCUE_SEQUENCE_MS + FINISH_DELAY_MS);
   } else {
     SFX.play('ice_collect');

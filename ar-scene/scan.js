@@ -80,6 +80,11 @@ const PREFETCH_URLS = [
   '../assets/sounds/button_click.wav',
   '../assets/videos/GameClearVideo.mp4',
 ];
+// 게임을 하나라도 깬 상태면 다음 게임 클리어가 곧 올클리어라, 그 게임 안에서 바로 틀 수 있게
+// 올클리어 영상(9MB)도 미리 받아둔다.
+if (window.GameClear && GameClear.isAnyCleared()) {
+  PREFETCH_URLS.push('../assets/videos/AllClearVideo.mp4');
+}
 const PREFETCH_DELAY_MS = 800; // 카메라/마커 인식 시작 직후 순간의 부하와 안 겹치게 살짝 늦춤
 
 function prefetchGameAssets() {
@@ -101,14 +106,4 @@ async function start() {
   setTimeout(prefetchGameAssets, PREFETCH_DELAY_MS);
 }
 
-// 두 게임을 모두 클리어한 채로 이 화면에 돌아왔으면, 평소의 카메라/마커 스캔 대신 올클리어
-// 영상을 먼저 보여준다. 클리어 기록은 영상 시작과 동시에 지워서(다음에 또 둘 다 깨면 다시
-// 재생되게), 영상 도중 새로고침/이탈해도 올클리어 영상이 반복 재생되지 않게 한다.
-// 영상이 끝나면 평소처럼 카메라를 켠다.
-if (window.GameClear && GameClear.isBothCleared()) {
-  const allClearVideoEl = document.getElementById('allclear-video');
-  GameClear.resetCleared();
-  GameClear.playVideo(allClearVideoEl, start);
-} else {
-  start();
-}
+start();

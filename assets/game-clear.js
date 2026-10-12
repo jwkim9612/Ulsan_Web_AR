@@ -24,6 +24,14 @@
     }
   }
 
+  function isAnyCleared() {
+    try {
+      return localStorage.getItem(KEYS.puzzle) === '1' || localStorage.getItem(KEYS.trash) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
   function resetCleared() {
     try {
       localStorage.removeItem(KEYS.puzzle);
@@ -36,8 +44,10 @@
   // 영상은 반드시 끝까지 봐야 하는 연출이라 'ended'가 안 뜨는 예외 상황(디코딩 실패, 자동재생이
   // 소리 켠 채로도 무음 상태로도 다 막히는 경우 등)에도 게임이 영원히 멈춰있으면 안 된다 —
   // 그래서 소리 재생 실패 시 무음으로 자동 전환하고, 그마저 실패하면 바로 다음 단계로 넘기며,
-  // 영상 길이(15초)보다 넉넉한 타임아웃을 안전장치로 걸어둔다.
-  const SAFETY_TIMEOUT_MS = 25000;
+  // 영상 길이보다 넉넉한 타임아웃을 안전장치로 걸어둔다. 영상마다 길이가 달라서(클리어 5초,
+  // 올클리어 40초) 메타데이터로 길이를 알게 되면 그 길이 + 여유분으로 다시 잡는다.
+  const SAFETY_DEFAULT_MS = 60000;
+  const SAFETY_MARGIN_MS = 10000;
 
   function playVideo(videoEl, onEnded) {
     if (!videoEl) {
@@ -65,7 +75,15 @@
       onEnded();
     };
 
-    safetyTimer = setTimeout(finish, SAFETY_TIMEOUT_MS);
+    const armSafety = () => {
+      clearTimeout(safetyTimer);
+      const ms = isFinite(videoEl.duration) && videoEl.duration > 0
+        ? videoEl.duration * 1000 + SAFETY_MARGIN_MS
+        : SAFETY_DEFAULT_MS;
+      safetyTimer = setTimeout(finish, ms);
+    };
+    armSafety();
+    if (!(videoEl.duration > 0)) videoEl.addEventListener('loadedmetadata', armSafety, { once: true });
     videoEl.addEventListener('ended', finish);
 
     videoEl.style.display = 'block';
@@ -81,5 +99,5 @@
     });
   }
 
-  window.GameClear = { markCleared, isBothCleared, resetCleared, playVideo };
+  window.GameClear = { markCleared, isBothCleared, isAnyCleared, resetCleared, playVideo };
 })();
