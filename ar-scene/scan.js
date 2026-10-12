@@ -102,14 +102,13 @@ async function start() {
 }
 
 // 두 게임을 모두 클리어한 채로 이 화면에 돌아왔으면, 평소의 카메라/마커 스캔 대신 올클리어
-// 영상을 먼저 보여준다. 영상이 끝나면 클리어 기록을 지우고(다음에 또 둘 다 깨면 다시 재생되게)
-// 평소처럼 카메라를 켠다.
+// 영상을 먼저 보여준다. 클리어 기록은 영상 시작과 동시에 지워서(다음에 또 둘 다 깨면 다시
+// 재생되게), 영상 도중 새로고침/이탈해도 올클리어 영상이 반복 재생되지 않게 한다.
+// 영상이 끝나면 평소처럼 카메라를 켠다.
 if (window.GameClear && GameClear.isBothCleared()) {
   const allClearVideoEl = document.getElementById('allclear-video');
-  GameClear.playVideo(allClearVideoEl, () => {
-    GameClear.resetCleared();
-    start();
-  });
+  GameClear.resetCleared();
+  GameClear.playVideo(allClearVideoEl, start);
 } else {
   start();
 }
