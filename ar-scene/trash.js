@@ -37,6 +37,7 @@ const completeWhaleImgEl = document.getElementById('complete-whale');
 const clearVideoEl = document.getElementById('clear-video');
 const completeBtn = document.getElementById('complete-btn');
 const handGuideEl = document.getElementById('hand-guide');
+const handGuideIconEl = document.getElementById('hand-guide-icon');
 const handCanvas = document.getElementById('hand-canvas');
 
 // 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
@@ -1004,6 +1005,12 @@ let cvActive = false;
 
 function onLockStart() {
   lastHandSeenAt = performance.now(); // 락 시점부터 손 인식 안내 대기시간을 센다
+  // 손 안내 이미지(800KB)는 페이지 로드 때 받으면 초기 글b 프리로드와 대역폭을 다투므로,
+  // 첫 락 시점에 받기 시작한다 — 안내가 뜰 수 있는 건 최소 HAND_GUIDE_DELAY_MS 뒤라 그 전에 받아짐.
+  if (handGuideIconEl.dataset.src) {
+    handGuideIconEl.src = handGuideIconEl.dataset.src;
+    delete handGuideIconEl.dataset.src;
+  }
   if (DEBUG) {
     debugState.pipelineStatus = 'attempting';
     debugLog('onLockStart: registering pipeline modules');

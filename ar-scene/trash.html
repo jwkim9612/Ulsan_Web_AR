@@ -154,7 +154,8 @@
     }
     #hand-guide.visible { opacity: 1; visibility: visible; }
     #hand-guide-icon {
-      font-size: 64px; line-height: 1;
+      width: 120px; height: 120px; object-fit: contain;
+      opacity: 0.7; /* 손 이미지는 반투명으로 */
       animation: hand-guide-pulse 1.4s ease-in-out infinite;
     }
     /* 크게 → 작게: 손을 카메라에서 멀리 떨어뜨리는 동작을 표현 */
@@ -375,7 +376,7 @@
   <div id="trash-hint"></div>
   <div id="trash-finished">장생이를 모두 구했어요!</div>
   <div id="hand-guide">
-    <div id="hand-guide-icon">✋</div>
+    <img id="hand-guide-icon" data-src="../assets/images/hand.png" alt="" />
     <strong>손이 잘 보이지 않아요</strong>
     <p>손을 카메라에서 조금 멀리 떨어뜨려<br>손가락까지 화면에 다 보이게 해주세요</p>
   </div>
