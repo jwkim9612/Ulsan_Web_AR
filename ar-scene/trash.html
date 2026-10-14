@@ -14,25 +14,15 @@
   <!-- 위 8th Wall 번들들이 영어로 그려 넣는 카메라/모션 센서 권한 안내 문구를 한글로 바꿔치기 -->
   <script src="localize-8thwall-ui.js"></script>
 
-  <!-- 잡기/흔들기 판정 = MediaPipe Hands(구글, 무료). World Tracking이 이미 잡고 있는 카메라
-       프레임을 XR8.CameraPixelArray로 넘겨받아 쓰므로 별도 getUserMedia(camera_utils)는 필요 없음. -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
 
     /* xrextras 로딩 화면의 "Powered by 8th Wall" 워터마크 숨김 */
     .poweredby-img { display: none !important; }
 
-    #hand-canvas {
-      position: fixed; inset: 0; width: 100%; height: 100%;
-      z-index: 5; pointer-events: none;
-    }
-
-    /* 카메라 화면 전체에 수중 톤을 씌우는 순수 CSS 오버레이 — World Tracking/MediaPipe
-       Hands가 보는 실제 카메라 픽셀에는 전혀 영향 없음(DOM 위에 그려지는 시각 효과일 뿐).
-       hand-canvas(5)보다 아래, a-scene 카메라 캔버스보다는 위에 오도록 층을 나눈다. */
+    /* 카메라 화면 전체에 수중 톤을 씌우는 순수 CSS 오버레이 — World Tracking이 보는 실제
+       카메라 픽셀에는 전혀 영향 없음(DOM 위에 그려지는 시각 효과일 뿐).
+       a-scene 카메라 캔버스보다 위에 오도록 층을 나눈다. */
     #underwater-filter {
       position: fixed; inset: 0; z-index: 4; pointer-events: none;
       background: linear-gradient(180deg, rgba(6,70,100,0.30) 0%, rgba(4,110,130,0.16) 45%, rgba(2,40,70,0.38) 100%);
@@ -139,32 +129,6 @@
       font: bold 24px sans-serif; color: #fff; text-align: center;
       background: rgba(0,0,0,0.5); padding: 16px 28px; border-radius: 12px;
     }
-
-    /* 얼음 타겟팅 후 손이 한동안 인식되지 않으면 띄우는 안내(손 인식 즉시 사라짐).
-       터치를 막지 않도록 pointer-events: none, 팁 팝업(40)보다 아래. */
-    #hand-guide {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      z-index: 25; pointer-events: none;
-      width: min(80vw, 320px); box-sizing: border-box;
-      display: flex; flex-direction: column; align-items: center;
-      padding: 18px 20px; border-radius: 16px;
-      background: rgba(0,0,0,0.55); color: #fff; text-align: center;
-      font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-      opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s;
-    }
-    #hand-guide.visible { opacity: 1; visibility: visible; }
-    #hand-guide-icon {
-      width: 120px; height: 120px; object-fit: contain;
-      opacity: 0.7; /* 손 이미지는 반투명으로 */
-      animation: hand-guide-pulse 1.4s ease-in-out infinite;
-    }
-    /* 크게 → 작게: 손을 카메라에서 멀리 떨어뜨리는 동작을 표현 */
-    @keyframes hand-guide-pulse {
-      0%, 100% { transform: scale(1.25); }
-      50% { transform: scale(0.85); }
-    }
-    #hand-guide strong { margin-top: 12px; font-size: 18px; font-weight: 800; }
-    #hand-guide p { margin: 6px 0 0; font-size: 14px; line-height: 1.5; }
 
     /* 게임 화면 입장 시 몇 초간 띄우는 촬영 팁 팝업 — 하단 안내 카드(#bottom-panel)와 같은 톤.
        상/하단 패널(30)보다 위, 완료 화면(50)/클리어 영상(60)보다는 아래. */
@@ -354,8 +318,6 @@
 
   <div id="underwater-filter"></div>
 
-  <canvas id="hand-canvas"></canvas>
-
   <div id="top-chrome">
     <div id="top-panel">
       <div id="top-panel-row1">
@@ -375,27 +337,22 @@
   <div id="trash-count"><span id="trash-count-text">0/3</span></div>
   <div id="trash-hint"></div>
   <div id="trash-finished">장생이를 모두 구했어요!</div>
-  <div id="hand-guide">
-    <img id="hand-guide-icon" data-src="../assets/images/hand.png" alt="" />
-    <strong>손이 잘 보이지 않아요</strong>
-    <p>손을 카메라에서 조금 멀리 떨어뜨려<br>손가락까지 화면에 다 보이게 해주세요</p>
-  </div>
 
   <div id="tips-popup">
     <div id="tips-card">
       <h2>이렇게 하면 더 잘 돼요</h2>
       <div class="tips-item">
+        <div class="tips-icon">👀</div>
+        <div>
+          <strong>카메라로 얼음을 응시하세요</strong>
+          <p>얼음에 다가가 3초 동안 계속 바라보면 얼음이 깨지고 장생이를 구할 수 있어요.</p>
+        </div>
+      </div>
+      <div class="tips-item">
         <div class="tips-icon">📷</div>
         <div>
           <strong>밝은 곳에서 주변을 천천히 비춰주세요</strong>
           <p>벽만 보이거나 어두우면 얼음이 흔들리거나 엉뚱한 곳으로 날아갈 수 있어요.</p>
-        </div>
-      </div>
-      <div class="tips-item">
-        <div class="tips-icon">✋</div>
-        <div>
-          <strong>손은 카메라에서 한 뼘 이상 떨어뜨려 주세요</strong>
-          <p>너무 가까우면 손이 화면을 꽉 채워서 인식이 안 돼요. 손가락까지 화면에 다 보이게 해주세요.</p>
         </div>
       </div>
       <div id="tips-progress"><div id="tips-progress-bar"></div></div>

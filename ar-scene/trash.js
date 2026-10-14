@@ -3,12 +3,12 @@
 // 얼음 재질이 반투명이라 그 안에 들어있는 아기 장생이 마스코트
 // (`assets/models/Baby_Jangsaeng_Bounce.glb`)가 얼어붙은 채 멈춰 있는 게 비쳐 보인다. 사용자가 실제로 일정 거리
 // 안까지 다가와 그 얼음을 잠깐 바라보면 "타겟팅"되는데(화면 정면으로 옮겨지지 않고 제자리에서
-// 파티클 이펙트+살짝 커지는 것으로만 표시됨), 타겟팅된 동안에만 XR8.CameraPixelArray로 카메라
-// 프레임을 받아 MediaPipe Hands에 넘긴다. 손을 화면 중앙(잡기 존)에 잠깐 유지하면 "잡기"로
-// 인정되고, 잡은 채로 손을 흔들면 얼음이 자체 애니메이션(Ice_Break_1_5s)으로 균열·파편화되며
-// 깨지고, 장생이는 위로 살짝 떠오르며 Baby_Bounce_Loop로 통통 튀다가 구조된다(breakLockedItem 참고).
-// 타겟팅되면 얼음이 사용자 쪽으로 살짝 당겨지고(pullIceTowardCamera), 타겟팅(잡기 포함) 도중
-// 그 얼음에서 시선을 돌린 채 잠깐 지나면 타겟팅이 풀리며 원래 자리로 돌아간다(releaseLock 참고).
+// 파티클 이펙트+살짝 커지는 것으로만 표시됨), 타겟팅된 채로 GAZE_COLLECT_MS 동안 계속 바라보면
+// 얼음이 자체 애니메이션(Ice_Break_1_5s)으로 균열·파편화되며 깨지고, 장생이는 위로 살짝
+// 떠오르며 Baby_Bounce_Loop로 통통 튀다가 구조된다(breakLockedItem 참고). 예전엔 MediaPipe Hands로
+// 손 잡기+흔들기를 판정했는데, 태블릿 등에서 인식이 불안정해서 응시만으로 수집하도록 바꿨다.
+// 타겟팅되면 얼음이 사용자 쪽으로 살짝 당겨지고(pullIceTowardCamera), 타겟팅 도중 그 얼음에서
+// 시선을 돌린 채 잠깐 지나면 타겟팅이 풀리며 원래 자리로 돌아간다(releaseLock 참고).
 //
 // 두 모델의 스케일/피벗은 만든 툴마다 제각각일 수 있어서, `fitLoadedModel`이 로드된 실제
 // 바운딩 박스를 기준으로 목표 크기에 맞게 자동 스케일하고 중심을 맞춰준다 — 모델을 다시
@@ -23,7 +23,7 @@
 // 쓰레기(캔/PET병/컵) 3종은 6개(종류당 2개) 떠다니는 장식으로 두되, 얼음을 하나 깰 때마다
 // 2개씩 사라지게 해서 얼음 3개를 다 깨면 쓰레기도 정확히 다 없어진다(despawnTrashDecorBatch).
 // 화면 전체에는 CSS만으로 수중 톤 오버레이(#underwater-filter, trash.html)를 씌워뒀는데,
-// 실제 카메라 프레임(World Tracking/MediaPipe Hands가 쓰는 원본 픽셀)에는 영향이 없다.
+// 실제 카메라 프레임(World Tracking이 쓰는 원본 픽셀)에는 영향이 없다.
 
 const backBtn = document.getElementById('back-btn');
 const trashRoot = document.getElementById('trash-root');
@@ -50,9 +50,6 @@ document.addEventListener('pointerdown', () => {
     allClearVideoEl.currentTime = 0;
   }).catch(() => {});
 }, { once: true });
-const handGuideEl = document.getElementById('hand-guide');
-const handGuideIconEl = document.getElementById('hand-guide-icon');
-const handCanvas = document.getElementById('hand-canvas');
 
 // 완료 화면 전용 큰 이미지(1.4MB)는 display:none이어도 <img src>면 페이지 로드 시점에 바로
 // fetch되어 초기 로딩(=글b 프리로드)과 대역폭을 다툰다. data-src로 미뤄뒀다가 실제로 완료
@@ -83,20 +80,13 @@ completeBtn.addEventListener('click', () => {
   }
   GameClear.playVideo(clearVideoEl, () => SFX.navigate('scan.html'));
 });
-const handCtx = handCanvas.getContext('2d');
 
-// --- 안드로이드 크롬 손 인식 미동작 진단용 디버그 오버레이 (?debug=1) ---
-// USB 디버깅 없이도 화면에서 바로 원인을 좁힐 수 있도록, 파이프라인 등록/프레임 전달/검출
-// 각 단계의 성공·실패를 눈에 보이는 로그로 남긴다. 평소(?debug=1 없음)에는 완전히 비활성.
+// --- 실기기 진단용 디버그 오버레이 (?debug=1) ---
+// USB 디버깅 없이도 화면에서 바로 타겟팅/수집 진행 상태와 에러를 볼 수 있도록 로그로 남긴다.
+// 평소(?debug=1 없음)에는 완전히 비활성.
 const DEBUG = new URLSearchParams(location.search).get('debug') === '1';
 const debugState = {
-  pipelineStatus: 'idle', // idle | attempting | ok | failed
-  cvActive: false,
   locked: false,
-  framesSent: 0,
-  resultsReceived: 0,
-  lastLandmarkCount: 0,
-  lastShake: null,
   log: [], // 최근 이벤트/에러 스크롤 로그
 };
 let debugOverlayEl = null;
@@ -108,9 +98,7 @@ function debugLog(msg) {
 }
 function renderDebugOverlay() {
   debugOverlayEl.textContent =
-    `pipeline:${debugState.pipelineStatus} cvActive:${debugState.cvActive} locked:${debugState.locked} grabbed:${lockedItem ? lockedItem.grabbed : '-'}\n` +
-    `framesSent:${debugState.framesSent} sendResolved:${debugState.sendResolved || 0} resultsRecv:${debugState.resultsReceived} landmarks:${debugState.lastLandmarkCount}\n` +
-    `shake:${debugState.lastShake ? JSON.stringify(debugState.lastShake) : '-'}\n` +
+    `locked:${debugState.locked} gaze:${lockedItem && lockStartedAt !== null ? Math.round(performance.now() - lockStartedAt) : '-'}ms rescued:${rescuedCount}/${RESCUE_COUNT}\n` +
     `--- log ---\n${debugState.log.join('\n')}`;
 }
 if (DEBUG) {
@@ -124,8 +112,7 @@ if (DEBUG) {
   document.body.appendChild(debugOverlayEl);
   debugLog('debug overlay started');
   setInterval(renderDebugOverlay, 300);
-  // hands.send()는 Promise를 반환하는데 기존 동기 try/catch로는 비동기 reject를 못 잡는다 —
-  // MediaPipe 내부에서 조용히 실패(reject)하거나 uncaught 에러를 던지는 경우를 잡기 위한 전역 net.
+  // 비동기 reject나 uncaught 에러를 화면 로그로 잡기 위한 전역 net.
   window.addEventListener('unhandledrejection', (ev) => {
     debugLog(`unhandled rejection: ${(ev.reason && ev.reason.message) || ev.reason}`);
   });
@@ -137,13 +124,6 @@ if (DEBUG) {
 backBtn.addEventListener('click', () => {
   SFX.navigate('scan.html');
 });
-
-function resizeHandCanvas() {
-  handCanvas.width = window.innerWidth;
-  handCanvas.height = window.innerHeight;
-}
-resizeHandCanvas();
-window.addEventListener('resize', resizeHandCanvas);
 
 // --- 오브젝트 배치 및 거리/응시 판정 ---
 const RESCUE_COUNT = 3; // 이만큼 깨면 완료(스폰 개수와는 별개)
@@ -157,7 +137,9 @@ const LOCK_DISTANCE_M = 2.0; // 이 거리 안이면서 아래 각도 조건도 
                               // 수 있어서, "바라보고 있는지"를 같이 봐서 느슨하게 함)
 const LOCK_GAZE_DOT_THRESHOLD = 0.85; // 화면 중앙 쪽으로 바라보고 있어야 함(약 32도 이내)
 const LOCK_DWELL_MS = 1000; // 거리+응시 조건을 이만큼 계속 유지해야 실제로 타겟팅됨(스치듯 지나가는 것 방지)
-// 타겟팅(잡기 포함) 해제 조건 — 락 조건보다 넓게 잡아서(히스테리시스) 흔드는 도중 카메라가 살짝
+// 타겟팅된 뒤 이만큼 계속 바라보면 얼음이 깨지며 수집된다(잠깐 시선이 벗어난 동안엔 수집 안 함).
+const GAZE_COLLECT_MS = 3000;
+// 타겟팅 해제 조건 — 락 조건보다 넓게 잡아서(히스테리시스) 응시 도중 카메라가 살짝
 // 돌아가거나 한 발 물러선 정도로는 안 풀리고, 확실히 다른 곳을 볼 때만 풀린다.
 const UNLOCK_GAZE_DOT_THRESHOLD = 0.65; // 약 49도 밖으로 벗어나면 "안 보고 있음"
 const UNLOCK_DISTANCE_M = LOCK_DISTANCE_M + 1.0;
@@ -176,10 +158,10 @@ const SPAWN_HEIGHT_OFFSET_M = 0.9; // 눈높이(카메라) 기준 이만큼 위�
 const MAX_DRIFT_DISTANCE_M = SPAWN_MAX_M * 2;
 
 const TARGETED_ICE_SCALE = 1.12; // 타겟팅되면 얼음이 이만큼 커짐(위치는 그대로, 제자리에서 강조만)
-const GRABBED_ICE_SCALE = 1.3; // 잡으면 타겟팅 상태보다 한 단계 더 커져서 "쥐었다"는 게 구분됨
 
-let iceItems = []; // { el, iceEl, mascotEl, worldPos, grabbed, removed }
+let iceItems = []; // { el, iceEl, mascotEl, worldPos, removed }
 let lockedItem = null;
+let lockStartedAt = null; // 현재 얼음이 타겟팅된 시점(GAZE_COLLECT_MS 응시 판정용)
 let rescuedCount = 0;
 let lockCandidate = null; // 거리+응시 조건을 만족하기 시작한 얼음(아직 확정 lock 전)
 let lockCandidateStartedAt = null;
@@ -254,7 +236,7 @@ let trashDecorItems = []; // { el } — pop()한 순서대로 사라짐(스폰 �
 // 8th Wall 전용 A-Frame 빌드(vendor/8frame-1.5.0.min.js)에는 aframe-extras의 animation-mixer가
 // 없어서 직접 만듦 — tick()에서 매 프레임 mixer를 갱신해야 실제로 재생된다.
 // autoplay:false로 두면 로드만 해두고(글TF 기본 포즈로 정지) 재생은 안 하다가, 나중에
-// playClip()으로 원하는 시점에 원하는 클립을 재생할 수 있다 — 얼음 깨기(정지해 있다가 흔들 때만
+// playClip()으로 원하는 시점에 원하는 클립을 재생할 수 있다 — 얼음 깨기(정지해 있다가 수집될 때만
 // 재생)나 장생이(얼음 속에선 정지해 있다가 구출되는 순간부터 Baby_Bounce_Loop 반복)처럼
 // 원하는 시점에 클립을 재생해야 하는 경우에 쓴다.
 AFRAME.registerComponent('gltf-animation', {
@@ -523,7 +505,7 @@ function spawnIceItems() {
     const iceEl = document.createElement('a-entity');
     iceEl.setAttribute('gltf-model', ICE_MODEL_URL);
     // 로드는 해두되 재생은 안 함 — 글TF 기본 포즈가 이미 "온전한 얼음"이라 가만히 있으면
-    // 정지된 얼음처럼 보이고, breakLockedItem()에서 흔들리는 순간 playClip으로 재생한다.
+    // 정지된 얼음처럼 보이고, breakLockedItem()에서 깨지는 순간 playClip으로 재생한다.
     iceEl.setAttribute('gltf-animation', 'clip: Ice_Break_1_5s; autoplay: false; loop: false');
     fitLoadedModel(iceEl, ICE_MODEL_TARGET_SIZE_M);
     wrapper.appendChild(iceEl);
@@ -542,7 +524,7 @@ function spawnIceItems() {
     trashRoot.appendChild(wrapper);
 
     iceItems.push({
-      el: wrapper, iceEl, mascotEl, targetFx, worldPos, homePos: { ...worldPos }, grabbed: false, removed: false,
+      el: wrapper, iceEl, mascotEl, targetFx, worldPos, homePos: { ...worldPos }, removed: false,
     });
   }
   updateTrashCountText();
@@ -628,11 +610,12 @@ function pullIceTowardCamera(item, camPos) {
 }
 
 // 예전에는 타겟팅(lock)되면 얼음을 카메라 정면 고정 거리로 "순간이동"시켰는데, 사용자 요청으로
-// 그 방식은 없앴다. 이제 얼음은 스폰된 실제 위치에 계속 그대로 있고, 타겟팅되면(onLockStart)
+// 그 방식은 없앴다. 이제 얼음은 스폰된 실제 위치에 계속 그대로 있고, 타겟팅되면
 // 파티클 이펙트(targetFx)가 뜨고 살짝 커지며(TARGETED_ICE_SCALE), 월드 공간에서 사용자 쪽으로
 // 조금 당겨진다(pullIceTowardCamera — 카메라에 붙이지 않으므로 고개를 돌리면 화면 밖으로 나감).
-// 이미 타겟팅된 뒤에는 그 얼음을 계속 보고 있는지만 확인해서, 다른 곳을 UNLOCK_GRACE_MS 이상
-// 보고 있으면(잡은 상태였어도) 타겟팅을 풀어 다시 아무 얼음이나 고를 수 있게 한다.
+// 이미 타겟팅된 뒤에는 그 얼음을 계속 보고 있는지 확인해서, 타겟팅 후 GAZE_COLLECT_MS가 지나면
+// 깨서 수집하고, 다른 곳을 UNLOCK_GRACE_MS 이상 보고 있으면 타겟팅을 풀어 다시 아무 얼음이나
+// 고를 수 있게 한다.
 function updateLock() {
   const pose = getCameraPose();
   if (!pose) return;
@@ -645,6 +628,13 @@ function updateLock() {
       && toItemScratch.dot(forward) >= UNLOCK_GAZE_DOT_THRESHOLD;
     if (stillWatching) {
       lockLostSince = null;
+      const elapsed = performance.now() - lockStartedAt;
+      if (elapsed >= GAZE_COLLECT_MS) {
+        breakLockedItem();
+      } else {
+        const remainSec = Math.ceil((GAZE_COLLECT_MS - elapsed) / 1000);
+        trashHintEl.textContent = `얼음을 계속 바라봐 주세요 (${remainSec})`;
+      }
     } else if (lockLostSince === null) {
       lockLostSince = performance.now();
     } else if (performance.now() - lockLostSince >= UNLOCK_GRACE_MS) {
@@ -673,31 +663,28 @@ function updateLock() {
   if (performance.now() - lockCandidateStartedAt < LOCK_DWELL_MS) return;
 
   lockedItem = candidate;
-  lockedItem.grabbed = false;
+  lockStartedAt = performance.now();
   lockCandidate = null;
   lockCandidateStartedAt = null;
-  grabDwellStartedAt = null;
-  shakeHistory = [];
   lockedItem.targetFx.setAttribute('visible', true);
   lockedItem.iceEl.setAttribute('scale', `${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE} ${TARGETED_ICE_SCALE}`);
-  trashHintEl.textContent = '손을 뻗어 얼음을 잡아보세요';
-  if (DEBUG) debugState.locked = true;
+  trashHintEl.textContent = `얼음을 계속 바라봐 주세요 (${Math.ceil(GAZE_COLLECT_MS / 1000)})`;
+  if (DEBUG) { debugState.locked = true; debugLog('locked'); }
   pullIceTowardCamera(lockedItem, camPos);
-  onLockStart();
 }
 
-// 시선 이탈로 타겟팅(잡기 포함)을 푼다 — 얼음은 원래 크기/이펙트 없음 상태로 되돌리고, 손 인식
-// 파이프라인도 onLockEnd()로 같이 내린다(다음 타겟팅 때 onLockStart()가 다시 올림).
+// 시선 이탈로 타겟팅을 푼다 — 얼음은 원래 크기/이펙트 없음 상태로 되돌리고, 다음에 다시
+// 타겟팅되면 응시 시간(GAZE_COLLECT_MS)을 처음부터 다시 센다.
 function releaseLock() {
   const item = lockedItem;
   if (!item) return;
-  item.grabbed = false;
   item.targetFx.setAttribute('visible', false);
   item.iceEl.setAttribute('scale', '1 1 1');
   moveIceTo(item, { ...item.homePos }); // 당겨왔던 얼음을 원래 자리로 되돌림
   lockedItem = null;
+  lockStartedAt = null;
   lockLostSince = null;
-  onLockEnd();
+  if (DEBUG) debugState.locked = false;
   trashHintEl.textContent = '얼음을 다시 바라봐 주세요';
   if (DEBUG) debugLog('lock released: looked away');
 }
@@ -711,92 +698,8 @@ const distanceTrackerModule = {
   onUpdate: ({ processCpuResult }) => {
     if (!processCpuResult.reality) return; // 트래킹이 아직 준비 안 된 경우를 걸러내는 용도로만 사용
     updateLock();
-    updateHandGuide();
   },
 };
-
-// --- 손 인식 안내 ---
-// 얼음을 타겟팅한 뒤 HAND_GUIDE_DELAY_MS 동안 손이 한 번도 인식되지 않으면(대개 손을 카메라에
-// 너무 바짝 대서 화면을 꽉 채운 경우) 화면 가운데에 손을 멀리 떨어뜨리라는 안내를 띄운다.
-// 손이 인식되면 바로 숨기고 게임은 그대로 진행된다. hands.onResults는 프레임 전송이 실패하면
-// 아예 안 불릴 수 있어서, 표시 판정은 매 프레임 도는 이 루프에서 한다.
-const HAND_GUIDE_DELAY_MS = 3000;
-let lastHandSeenAt = 0;
-
-function updateHandGuide() {
-  if (lockedItem && performance.now() - lastHandSeenAt > HAND_GUIDE_DELAY_MS) {
-    handGuideEl.classList.add('visible');
-  }
-}
-
-function hideHandGuide() {
-  handGuideEl.classList.remove('visible');
-}
-
-// --- 잡기(grab) 판정 ---
-// 얼음은 이제 실제 스폰 위치에 그대로 있고 화면 정면으로 순간이동하지 않으므로, 잡으려면 타겟팅된
-// 얼음이 보이는 방향으로 카메라를 든 채 손을 화면 중앙(잡기 존)으로 뻗어야 한다 — 실제로 눈앞의
-// 얼음을 향해 손을 뻗는 느낌에 더 가까워짐. 판정 자체는 손 랜드마크의 정규화 좌표(0~1)가 화면
-// 중앙 근처에 있는지만 본다(얼음과의 화면상 정확한 겹침까지는 계산하지 않는 단순화).
-// 너무 빡빡하다는 피드백으로 존을 화면 중앙 70%까지 넓히고 유지 시간도 줄였다.
-const GRAB_ZONE_MIN = 0.15;
-const GRAB_ZONE_MAX = 0.85;
-const GRAB_DWELL_MS = 250; // 이 시간만큼 잡기 존 안에 머물러야 "잡기"로 인정(실수 방지)
-const GRAB_ZONE_GRACE_MS = 200; // 존을 잠깐 벗어나거나 손 검출이 한두 프레임 끊겨도 이 시간 안이면 유지 타이머를 리셋하지 않음
-
-let grabDwellStartedAt = null;
-let lastInZoneAt = 0;
-
-// gltf-model은 A-Frame의 material 컴포넌트로 색을 바꿀 수 없어서(모델 자체 재질을 쓰므로),
-// 잡았을 때 피드백은 스케일 변화로만 표현한다. 타겟팅 상태(TARGETED_ICE_SCALE)보다 한 단계 더
-// 커져서(GRABBED_ICE_SCALE) "쥐었다"는 게 구분된다. 한 번 잡으면(grabbed=true) 손이 잡기 존을
-// 벗어나도 "놓은 것"으로 되돌리지 않고 계속 흔들기 판정으로 넘어간다 — 깨는 도중 손이 살짝
-// 존을 벗어났다고 다시 잡기부터 시작해야 하면 답답하기 때문. 단, 얼음에서 시선을 확실히 돌리면
-// updateLock()의 releaseLock()이 잡은 상태까지 같이 푼다.
-function onGrab(item) {
-  item.grabbed = true;
-  item.iceEl.setAttribute('scale', `${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE} ${GRABBED_ICE_SCALE}`);
-  trashHintEl.textContent = '손을 흔들어서 얼음을 깨보세요!';
-  if (DEBUG) debugLog('grab: item grabbed');
-}
-
-// --- 흔들기(shake) 판정 (기존 ar-scene 손 인식 모드의 쓰다듬기 판정과 같은 원리) ---
-// 손바닥 중앙(랜드마크 9번, 중지 뿌리)의 좌표를 최근 SHAKE_HISTORY_MS만큼 기록해두고,
-// 그 안에서 방향이 여러 번 바뀌면 "흔들기"로 판정. 쓰다듬기보다 더 크고 빠른 움직임을
-// 기대하는 동작이라 허용 진폭(SHAKE_MAX_SPREAD)과 최소 이동량(SHAKE_MIN_MOVE)을 더 크게 잡음.
-const SHAKE_HISTORY_MS = 900;
-const SHAKE_MIN_REVERSALS = 2;
-const SHAKE_MIN_MOVE = 0.02;
-const SHAKE_MAX_SPREAD = 0.5;
-const BREAK_COOLDOWN_MS = 1000;
-
-let shakeHistory = [];
-let lastBreakTime = 0;
-
-function checkShake(x, y, now) {
-  shakeHistory.push({ x, y, t: now });
-  shakeHistory = shakeHistory.filter((p) => now - p.t <= SHAKE_HISTORY_MS);
-  if (shakeHistory.length < 4) return false;
-
-  let reversals = 0;
-  let prevDir = 0;
-  for (let i = 1; i < shakeHistory.length; i++) {
-    const dx = shakeHistory[i].x - shakeHistory[i - 1].x;
-    const dy = shakeHistory[i].y - shakeHistory[i - 1].y;
-    const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
-    if (Math.abs(delta) < SHAKE_MIN_MOVE) continue;
-    const dir = delta > 0 ? 1 : -1;
-    if (prevDir !== 0 && dir !== prevDir) reversals++;
-    prevDir = dir;
-  }
-
-  const xs = shakeHistory.map((p) => p.x);
-  const ys = shakeHistory.map((p) => p.y);
-  const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-
-  if (DEBUG) debugState.lastShake = { reversals, spread: Number(spread.toFixed(4)) };
-  return reversals >= SHAKE_MIN_REVERSALS && spread <= SHAKE_MAX_SPREAD;
-}
 
 // --- 깨짐 이펙트 ---
 // 얼음/장생이 둘 다 실제 애니메이션 클립을 갖고 있어서(Ice_Break_1_5s, Baby_Bounce_Loop),
@@ -834,8 +737,9 @@ function breakLockedItem() {
 
   item.removed = true;
   lockedItem = null;
+  lockStartedAt = null;
   lockLostSince = null;
-  onLockEnd();
+  if (DEBUG) { debugState.locked = false; debugLog('collected'); }
 
   // 얼음 자체가 스스로 깨진다(균열 -> 파편 흩어짐, 1.5초) — 파편을 따로 만들 필요 없음.
   item.iceEl.components['gltf-animation'].playClip('Ice_Break_1_5s', { loop: false });
@@ -891,208 +795,10 @@ function breakLockedItem() {
   }
 }
 
-const hands = new Hands({
-  locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-});
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 0,
-  minDetectionConfidence: 0.5,
-  minTrackingConfidence: 0.5,
-});
-
-hands.onResults((results) => {
-  if (DEBUG) debugState.resultsReceived++;
-  handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-
-  const hasHand = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
-  if (DEBUG) debugState.lastLandmarkCount = hasHand ? results.multiHandLandmarks[0].length : 0;
-  if (!hasHand) {
-    if (performance.now() - lastInZoneAt > GRAB_ZONE_GRACE_MS) grabDwellStartedAt = null;
-    shakeHistory = [];
-    return;
-  }
-
-  lastHandSeenAt = performance.now();
-  hideHandGuide();
-
-  // 손 뼈대(랜드마크) 시각화 — 사용자 요청으로 잠시 꺼둠(필요하면 주석 해제해서 다시 켤 것).
-  // for (const landmarks of results.multiHandLandmarks) {
-  //   drawConnectors(handCtx, landmarks, HAND_CONNECTIONS, { color: '#2ea5ff', lineWidth: 3 });
-  //   drawLandmarks(handCtx, landmarks, { color: '#ffffff', fillColor: '#2ea5ff', radius: 4 });
-  // }
-
-  if (!lockedItem) return;
-
-  const palm = results.multiHandLandmarks[0][9];
-  const now = performance.now();
-  const inZone = palm.x >= GRAB_ZONE_MIN && palm.x <= GRAB_ZONE_MAX
-    && palm.y >= GRAB_ZONE_MIN && palm.y <= GRAB_ZONE_MAX;
-
-  if (!lockedItem.grabbed) {
-    if (!inZone) {
-      if (now - lastInZoneAt > GRAB_ZONE_GRACE_MS) grabDwellStartedAt = null;
-      return;
-    }
-    lastInZoneAt = now;
-    if (grabDwellStartedAt === null) { grabDwellStartedAt = now; return; }
-    if (now - grabDwellStartedAt < GRAB_DWELL_MS) return;
-    grabDwellStartedAt = null;
-    onGrab(lockedItem);
-    return;
-  }
-
-  // 이미 잡은 상태면 잡기 존을 벗어나도 놓은 것으로 취급하지 않고 그대로 흔들기 판정으로 넘어간다.
-  if (checkShake(palm.x, palm.y, now) && now - lastBreakTime > BREAK_COOLDOWN_MS) {
-    lastBreakTime = now;
-    shakeHistory = [];
-    breakLockedItem();
-  }
-});
-
-// --- XR8.CameraPixelArray -> MediaPipe Hands 프레임 전달 ---
-// lock된 동안에만 가동해서 World Tracking(SLAM)과 동시 구동할 때의 부하를 줄인다.
-const MEDIAPIPE_MIN_INTERVAL_MS = 120; // 시간 기반 스로틀
-let lastHandsSendAt = 0;
-const handsSourceCanvas = document.createElement('canvas');
-const handsSourceCtx = handsSourceCanvas.getContext('2d');
-let handsImageData = null; // 크기가 안 바뀌는 한 재사용 — 손 인식 활성 구간 내내 매 프레임 호출되므로 여기서 매번 새로 만들면 GC 압박이 커진다.
-
-function pixelArrayToCanvas({ rows, cols, rowBytes, pixels }) {
-  if (handsSourceCanvas.width !== cols || handsSourceCanvas.height !== rows) {
-    handsSourceCanvas.width = cols;
-    handsSourceCanvas.height = rows;
-    handsImageData = null;
-  }
-  if (!handsImageData) handsImageData = handsSourceCtx.createImageData(cols, rows);
-  const imageData = handsImageData;
-  const expectedRowBytes = cols * 4; // luminance:false로 요청 -> RGBA
-  if (rowBytes === expectedRowBytes) {
-    imageData.data.set(pixels);
-  } else {
-    for (let row = 0; row < rows; row++) {
-      imageData.data.set(pixels.subarray(row * rowBytes, row * rowBytes + expectedRowBytes), row * expectedRowBytes);
-    }
-  }
-  handsSourceCtx.putImageData(imageData, 0, 0);
-  if (DEBUG) handCtx.drawImage(handsSourceCanvas, 0, 0, 160, 120); // 색이 잘못되면 RGBA 가정 오류 육안 확인용
-  return handsSourceCanvas;
-}
-
-let loggedPixelArrayShape = false; // 락마다 한 번만 실제 객체 모양을 로그(스팸 방지)
-
-// MediaPipe Hands(레거시 Solutions API)는 이전 send()의 Promise가 끝나기 전에 다음 프레임을
-// 보내면 내부 WASM 상태가 겹쳐서 깨질 수 있다("memory access out of bounds"로 계속 reject됨 —
-// 처리 속도가 느린 기기일수록 시간 스로틀만으로는 안 걸러지고 겹칠 확률이 높아짐). 그래서 시간
-// 스로틀과 별개로, 이전 프레임이 아직 처리 중이면 무조건 이번 프레임은 건너뛴다.
-let sendInFlight = false;
-
-const cvModule = {
-  name: 'trash-cv',
-  onProcessCpu: ({ processGpuResult }) => {
-    try {
-      const cameraPixelArray = processGpuResult.camerapixelarray;
-      if (!cameraPixelArray || sendInFlight) return;
-      if (DEBUG && !loggedPixelArrayShape) {
-        loggedPixelArrayShape = true;
-        const { rows, cols, rowBytes, pixels } = cameraPixelArray;
-        debugLog(`shape rows=${rows}(${typeof rows}) cols=${cols}(${typeof cols}) rowBytes=${rowBytes}(${typeof rowBytes})`);
-        debugLog(`pixels=${pixels && pixels.constructor && pixels.constructor.name} len=${pixels && pixels.length}`);
-        debugLog(`keys=${Object.keys(cameraPixelArray).join(',')}`);
-      }
-      const now = performance.now();
-      if (now - lastHandsSendAt < MEDIAPIPE_MIN_INTERVAL_MS) return;
-      lastHandsSendAt = now;
-      sendInFlight = true;
-      const sendPromise = hands.send({ image: pixelArrayToCanvas(cameraPixelArray) });
-      if (DEBUG) debugState.framesSent++;
-      if (sendPromise && typeof sendPromise.then === 'function') {
-        sendPromise.then(
-          () => { if (DEBUG) debugState.sendResolved = (debugState.sendResolved || 0) + 1; },
-          (e) => { if (DEBUG) debugLog(`hands.send rejected: ${(e && e.message) || e}`); },
-        ).finally(() => { sendInFlight = false; });
-      } else {
-        sendInFlight = false; // send()가 Promise가 아닌 값을 준 이례적인 경우 대비
-      }
-    } catch (e) {
-      sendInFlight = false;
-      console.error('[ice] CameraPixelArray -> MediaPipe 프레임 전달 실패', e);
-      debugLog(`send failed: ${(e && e.message) || e}`);
-    }
-  },
-};
-
-// XR8.CameraPixelArray는 락되기 전까지 한 번도 안 건드리는 API라, 실제 기기에서 처음
-// 호출되는 시점(락 되는 순간)에야 문제가 드러날 수 있다 — 여기서 실패해도 손 인식만
-// 못 하게 될 뿐, 거리 판정/락 자체(World Tracking)는 계속 정상 동작하도록 격리한다.
-let cvActive = false;
-
-function onLockStart() {
-  lastHandSeenAt = performance.now(); // 락 시점부터 손 인식 안내 대기시간을 센다
-  // 손 안내 이미지(800KB)는 페이지 로드 때 받으면 초기 글b 프리로드와 대역폭을 다투므로,
-  // 첫 락 시점에 받기 시작한다 — 안내가 뜰 수 있는 건 최소 HAND_GUIDE_DELAY_MS 뒤라 그 전에 받아짐.
-  if (handGuideIconEl.dataset.src) {
-    handGuideIconEl.src = handGuideIconEl.dataset.src;
-    delete handGuideIconEl.dataset.src;
-  }
-  if (DEBUG) {
-    debugState.pipelineStatus = 'attempting';
-    debugLog('onLockStart: registering pipeline modules');
-    loggedPixelArrayShape = false;
-  }
-  try {
-    XR8.addCameraPipelineModule(XR8.CameraPixelArray.pipelineModule({ luminance: false, maxDimension: 320 }));
-    XR8.addCameraPipelineModule(cvModule);
-    cvActive = true;
-    if (DEBUG) { debugState.pipelineStatus = 'ok'; debugState.cvActive = true; debugLog('pipeline registered ok'); }
-  } catch (e) {
-    console.error('[ice] CameraPixelArray 파이프라인 모듈 등록 실패 — 잡기/흔들기 인식 없이 진행', e);
-    cvActive = false;
-    if (DEBUG) { debugState.pipelineStatus = 'failed'; debugLog(`pipeline register failed: ${(e && e.message) || e}`); }
-  }
-}
-
-// MediaPipe Hands는 wasm/모델 파일을 첫 send() 시점에야 지연 로딩한다. 이걸 락 거는 순간까지
-// 미뤄두면 사용자가 처음 손을 뻗으려는 바로 그 순간 로딩 렉을 그대로 겪게 되므로, 씬 시작
-// 시점에 더미 프레임을 한 번 보내 미리 로딩해둔다.
-function warmupHands() {
-  if (sendInFlight) return;
-  const warmupCanvas = document.createElement('canvas');
-  warmupCanvas.width = 64;
-  warmupCanvas.height = 64;
-  sendInFlight = true;
-  if (DEBUG) debugLog('warmup: send() started');
-  const p = hands.send({ image: warmupCanvas });
-  const done = (label) => { if (DEBUG) debugLog(`warmup: ${label}`); sendInFlight = false; };
-  if (p && typeof p.then === 'function') {
-    p.then(() => done('resolved'), (e) => done(`rejected: ${(e && e.message) || e}`));
-  } else {
-    sendInFlight = false;
-  }
-}
-
-function onLockEnd() {
-  if (cvActive) {
-    try {
-      XR8.removeCameraPipelineModule('trash-cv');
-      XR8.removeCameraPipelineModule('camerapixelarray');
-    } catch (e) {
-      console.error('[ice] CameraPixelArray 파이프라인 모듈 해제 실패', e);
-      if (DEBUG) debugLog(`pipeline unregister failed: ${(e && e.message) || e}`);
-    }
-    cvActive = false;
-  }
-  if (DEBUG) { debugState.cvActive = false; debugState.locked = false; debugState.pipelineStatus = 'idle'; }
-  handCtx.clearRect(0, 0, handCanvas.width, handCanvas.height);
-  hideHandGuide();
-  grabDwellStartedAt = null;
-  shakeHistory = [];
-}
-
 // --- 촬영 팁 팝업 ---
-// 벽만 비추거나 어두우면 World Tracking이 위치를 놓쳐 얼음이 날아가고, 손을 카메라에 너무
-// 바짝 대면 손이 화면을 꽉 채워 MediaPipe Hands가 인식을 못 한다 — 게임 화면에 들어오면
-// 이 두 가지를 몇 초간 안내한다. 게임 진행(스폰/판정)은 팝업과 무관하게 그대로 돌아간다.
+// 게임 화면에 들어오면 "카메라로 얼음을 응시하면 수집된다"는 조작법과, 벽만 비추거나 어두우면
+// World Tracking이 위치를 놓쳐 얼음이 날아간다는 촬영 팁을 몇 초간 안내한다. 게임 진행(스폰/판정)은
+// 팝업과 무관하게 그대로 돌아간다.
 const TIPS_POPUP_MS = 6000;
 const tipsPopupEl = document.getElementById('tips-popup');
 const tipsProgressBarEl = document.getElementById('tips-progress-bar');
@@ -1136,7 +842,6 @@ const onxrloaded = () => {
   XR8.addCameraPipelineModule(XR8.XrController.pipelineModule());
   XR8.addCameraPipelineModule(distanceTrackerModule);
 
-  warmupHands();
   spawnIceItems();
   spawnDecorativeWhales();
   spawnDecorativeReef();
